@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block bodyclass %}home{% endblock %}
+{% block main %}
+<nav class="tiles" data-grid>
+  {% for t in tiles %}
+  <a class="tile{% if not t.ready %} not-ready{% endif %}" href="/s/{{ t.s.slug }}" data-hotkey="{{ t.s.hotkey }}"
+     {% if loop.first %}autofocus{% endif %}>
+    <span class="key">{{ t.s.hotkey | upper }}</span>
+    <span class="title">{{ t.s.title }}</span>
+    <span class="blurb">{{ t.s.blurb }}</span>
+    {% if not t.ready %}<span class="badge">no hardware</span>{% endif %}
+  </a>
+  {% endfor %}
+</nav>
+{% endblock %}
+{% block keyhints %}<kbd>←↑→↓</kbd> move · <kbd>Enter</kbd> open · letter = jump · <kbd>?</kbd> help{% endblock %}

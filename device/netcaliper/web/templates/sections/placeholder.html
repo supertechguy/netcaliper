@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}{{ section.title }} · netcaliper{% endblock %}
+{% block main %}
+<section class="page">
+  <h1>{{ section.title }}</h1>
+  <p class="dim">{{ section.blurb }}</p>
+  <p class="notice">Arrives in Phase {{ section.phase }} — see docs/ROADMAP.md.</p>
+  {% if section.needs %}
+  <h2>Hardware for this section</h2>
+  {% if devices %}
+  <ul class="list" data-list>
+    {% for d in devices %}<li tabindex="0">{{ d.name }} <span class="dim">{{ d.role or "" }}</span></li>{% endfor %}
+  </ul>
+  {% else %}<p class="warn">None detected.</p>{% endif %}
+  {% endif %}
+</section>
+{% endblock %}

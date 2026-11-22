@@ -1,0 +1,59 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "title": "Action",
+      "type": "string"
+    },
+    "actor": {
+      "title": "Actor",
+      "type": "string"
+    },
+    "detail": {
+      "additionalProperties": true,
+      "title": "Detail",
+      "type": "object"
+    },
+    "engagement_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Engagement Id"
+    },
+    "hash": {
+      "default": "",
+      "title": "Hash",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "prev_hash": {
+      "default": "",
+      "title": "Prev Hash",
+      "type": "string"
+    },
+    "ts": {
+      "format": "date-time",
+      "title": "Ts",
+      "type": "string"
+    }
+  },
+  "required": [
+    "actor",
+    "action"
+  ],
+  "title": "AuditEntry",
+  "type": "object",
+  "x-netcaliper": {
+    "kind": "audit",
+    "schema_version": 1
+  }
+}

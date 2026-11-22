@@ -1,0 +1,7 @@
+<span class="brand">netcaliper</span>
+{% if mock %}<span class="pill warn">MOCK HW</span>{% endif %}
+<span class="pill">mgmt: {{ mgmt.ifname if mgmt else "none" }}</span>
+<span class="pill">sync: {% if sync.enabled %}{{ pending }} queued{% else %}off ({{ pending }} queued){% endif %}</span>
+{% if inv.platform.battery_percent is not none %}<span class="pill">bat {{ inv.platform.battery_percent }}%</span>{% endif %}
+<span class="spacer"></span>
+<span class="clock">{{ now.strftime("%H:%M") }}Z</span>

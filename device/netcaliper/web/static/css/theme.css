@@ -1,0 +1,60 @@
+/* SPDX-License-Identifier: GPL-3.0-only
+   netcaliper phosphor theme — tokens shared with netlog/netdash. Target: 1280x720, keyboard-first. */
+:root {
+  --bg: #040904; --bg-2: #0a140a; --bg-3: #102010;
+  --fg: #39ff6a; --fg-dim: #1c8a3a; --fg-faint: #0f4a1f;
+  --warn: #ffb000; --fail: #ff4a4a; --ok: #39ff6a; --info: #5fd7ff;
+  --focus: #b6ffcb;
+  --font: "DejaVu Sans Mono", "Fira Mono", ui-monospace, monospace;
+  --fs: 20px; --radius: 6px;
+}
+* { box-sizing: border-box; }
+html { scrollbar-color: var(--fg-faint) var(--bg); }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: var(--fs)/1.35 var(--font); }
+body { display: grid; grid-template-rows: 44px 1fr 32px; overflow: hidden; }
+body::after { /* subtle scanlines */
+  content: ""; position: fixed; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(transparent 0 2px, rgba(0,0,0,.18) 2px 3px);
+}
+a { color: inherit; }
+.dim { color: var(--fg-dim); } .small { font-size: .7em; } .warn { color: var(--warn); } .fail { color: var(--fail); }
+kbd { border: 1px solid var(--fg-dim); border-radius: 4px; padding: 0 .3em; font: inherit; font-size: .85em; }
+
+.statusbar { display: flex; gap: .6rem; align-items: center; padding: 0 .8rem; background: var(--bg-2);
+  border-bottom: 1px solid var(--fg-faint); font-size: 16px; }
+.statusbar .brand { font-weight: bold; letter-spacing: .08em; text-shadow: 0 0 6px var(--fg-dim); }
+.pill { border: 1px solid var(--fg-faint); border-radius: 999px; padding: 0 .6em; color: var(--fg-dim); }
+.pill.warn { color: var(--warn); border-color: var(--warn); }
+.spacer { flex: 1; }
+.keyhints { font-size: 14px; color: var(--fg-dim); padding: 6px .8rem; border-top: 1px solid var(--fg-faint); }
+
+main { overflow: auto; padding: 16px 20px; scrollbar-color: var(--fg-faint) var(--bg); }
+.tiles { display: grid; grid-template-columns: repeat(5, 1fr); grid-auto-rows: 1fr; gap: 14px; height: 100%; }
+.tile { position: relative; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px;
+  padding: 14px; min-height: 48px; text-decoration: none; background: var(--bg-2);
+  border: 2px solid var(--fg-faint); border-radius: var(--radius); }
+.tile .title { font-size: 1.35em; font-weight: bold; }
+.tile .blurb { font-size: .66em; color: var(--fg-dim); }
+.tile .key { position: absolute; top: 10px; right: 12px; color: var(--fg-dim); font-size: .8em; }
+.tile .badge { position: absolute; top: 10px; left: 12px; font-size: .6em; color: var(--warn); }
+.tile.not-ready { opacity: .7; }
+.tile:hover { border-color: var(--fg-dim); }
+:focus-visible, .tile:focus { outline: 3px solid var(--focus); outline-offset: 2px; box-shadow: 0 0 14px var(--fg-dim); }
+
+.page h1 { margin: 0 0 .3em; font-size: 1.5em; text-shadow: 0 0 8px var(--fg-faint); }
+.page h2 { font-size: 1.05em; color: var(--fg-dim); margin-top: 1.2em; }
+.notice { border-left: 3px solid var(--info); padding-left: .6em; color: var(--info); }
+.btn { font: inherit; color: var(--bg); background: var(--fg); border: 0; border-radius: var(--radius);
+  padding: .3em 1em; min-height: 44px; cursor: pointer; }
+table.grid { width: 100%; border-collapse: collapse; font-size: .8em; }
+table.grid th { text-align: left; color: var(--fg-dim); border-bottom: 1px solid var(--fg-faint); }
+table.grid td { padding: 6px 8px; border-bottom: 1px solid var(--bg-3); vertical-align: top; }
+table.grid tr.missing td { color: var(--fg-faint); }
+.cap { display: inline-block; font-size: .8em; padding: 0 .4em; margin: 1px; border-radius: 4px; border: 1px solid; }
+.cap-ok { color: var(--ok); border-color: var(--fg-faint); }
+.cap-degraded { color: var(--warn); border-color: var(--warn); }
+.cap-absent { color: var(--fg-faint); border-color: var(--fg-faint); text-decoration: line-through; }
+.list li { padding: 4px; }
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: grid; place-items: center; }
+.overlay[hidden] { display: none; }
+.overlay .panel { background: var(--bg-2); border: 2px solid var(--fg-dim); border-radius: var(--radius); padding: 1em 2em; }

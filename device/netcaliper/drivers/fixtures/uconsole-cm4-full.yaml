@@ -1,0 +1,38 @@
+# Synthetic: uConsole CM4 (ClockworkPi image) with every device in docs/HARDWARE.md attached via a
+# USB 2.0 hub. Default mock for development and tests. Replace with a recording from the real unit
+# (`netcaliper doctor --record --anonymize`) once available.
+source: fixture:uconsole-cm4-full
+platform:
+  model: Raspberry Pi Compute Module 4 Rev 1.1
+  compatible: [raspberrypi,4-compute-module, brcm,bcm2711]
+  arch: aarch64
+  kernel: 6.12.y-clockworkpi
+  os_release: {ID: debian, VERSION_ID: "12", VERSION_CODENAME: bookworm, PRETTY_NAME: "Debian GNU/Linux 12 (bookworm)"}
+  python: 3.11.2
+  drm:
+  - {name: DSI-1, status: connected, modes: [720x1280]}
+  - {name: HDMI-A-1, status: disconnected, modes: []}
+usb:
+- {path: 1-1, vid: "2109", pid: "3431", product: USB2.0 Hub, speed_mbps: 480, interface_drivers: [hub]}
+- {path: 1-1.1, vid: 0b95, pid: "1790", manufacturer: ASIX, product: AX88179, serial: 0000249B2F0C4A, speed_mbps: 480, interface_drivers: [ax88179_178a]}
+- {path: 1-1.2, vid: 0e8d, pid: "7610", manufacturer: MediaTek, product: WiFi, serial: "1.0", speed_mbps: 480, interface_drivers: [mt76x0u]}
+- {path: 1-1.3, vid: 0bda, pid: "8176", manufacturer: Realtek, product: "802.11n WLAN Adapter", serial: 00e04c000001, speed_mbps: 480, interface_drivers: [rtl8192cu]}
+- {path: 1-1.4, vid: 0bda, pid: "2838", manufacturer: Realtek, product: RTL2838UHIDIR, serial: "00000001", speed_mbps: 480, interface_drivers: []}
+- {path: 1-1.5, vid: "1915", pid: "0102", product: Research Firmware, speed_mbps: 12, interface_drivers: []}
+net:
+- {name: eth0, mac: "d8:3a:dd:00:00:01", driver: bcmgenet, bus: platform, operstate: down, link_modes: [10baseT/Half, 10baseT/Full, 100baseT/Half, 100baseT/Full, 1000baseT/Full], has_phydev: true}
+- {name: wlan0, mac: "d8:3a:dd:00:00:02", driver: brcmfmac, bus: sdio, wireless: true, phy: phy0, operstate: up, default_route: true}
+- {name: enx00249b2f0c4a, mac: "00:24:9b:2f:0c:4a", driver: ax88179_178a, bus: usb, usb_path: "1-1.1", operstate: down, link_modes: [10baseT/Half, 10baseT/Full, 100baseT/Half, 100baseT/Full, 1000baseT/Full]}
+- {name: wlx9cefd5000001, mac: "9c:ef:d5:00:00:01", driver: mt76x0u, bus: usb, usb_path: "1-1.2", wireless: true, phy: phy1, operstate: down}
+- {name: wlx0013ef000001, mac: "00:13:ef:00:00:01", driver: rtl8192cu, bus: usb, usb_path: "1-1.3", wireless: true, phy: phy2, operstate: down}
+wiphys:
+- {name: phy0, iw_info_file: iw/iw_phy_brcmfmac.txt}
+- {name: phy1, iw_info_file: iw/iw_phy_mt76x0u.txt}
+- {name: phy2, iw_info_file: iw/iw_phy_rtl8192cu.txt}
+bluetooth:
+- {name: hci0, driver: hci_uart_bcm, bus: platform}
+power_supplies:
+- {name: axp20x-battery, type: Battery, capacity: 82, status: Discharging}
+- {name: axp20x-ac, type: Mains}
+kernel_modules: [ax88179_178a, brcmfmac, mt76x0u, rtl8192cu]
+tools: {iw: /usr/sbin/iw, ip: /usr/sbin/ip, ethtool: /usr/sbin/ethtool, nmap: /usr/bin/nmap, nft: /usr/sbin/nft, rtl_433: /usr/bin/rtl_433, rtl_power: /usr/bin/rtl_power, cage: /usr/bin/cage, chromium: /usr/bin/chromium}

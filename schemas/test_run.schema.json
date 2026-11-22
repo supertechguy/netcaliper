@@ -1,0 +1,87 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "clock_synced": {
+      "default": false,
+      "title": "Clock Synced",
+      "type": "boolean"
+    },
+    "finished_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Finished At"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "profile_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Profile Id"
+    },
+    "site_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Site Id"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    },
+    "status": {
+      "anyOf": [
+        {
+          "enum": [
+            "pass",
+            "warn",
+            "fail",
+            "error",
+            "skipped"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "running",
+          "type": "string"
+        }
+      ],
+      "default": "running",
+      "title": "Status"
+    },
+    "summary": {
+      "additionalProperties": true,
+      "title": "Summary",
+      "type": "object"
+    }
+  },
+  "title": "TestRun",
+  "type": "object",
+  "x-netcaliper": {
+    "kind": "test_run",
+    "schema_version": 1
+  }
+}

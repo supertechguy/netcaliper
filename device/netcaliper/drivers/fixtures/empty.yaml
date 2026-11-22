@@ -1,0 +1,3 @@
+# No test hardware at all (e.g. CI runner).
+source: fixture:empty
+platform: {arch: x86_64}

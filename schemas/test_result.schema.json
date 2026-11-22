@@ -1,0 +1,122 @@
+{
+  "$defs": {
+    "ArtifactRef": {
+      "description": "Metadata only \u2014 artifact bytes never leave the device.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size": {
+          "title": "Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "size",
+        "sha256"
+      ],
+      "title": "ArtifactRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "artifacts": {
+      "items": {
+        "$ref": "#/$defs/ArtifactRef"
+      },
+      "title": "Artifacts",
+      "type": "array"
+    },
+    "details": {
+      "additionalProperties": true,
+      "title": "Details",
+      "type": "object"
+    },
+    "finished_at": {
+      "format": "date-time",
+      "title": "Finished At",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "message": {
+      "default": "",
+      "title": "Message",
+      "type": "string"
+    },
+    "metrics": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "title": "Metrics",
+      "type": "object"
+    },
+    "module_id": {
+      "title": "Module Id",
+      "type": "string"
+    },
+    "module_version": {
+      "title": "Module Version",
+      "type": "string"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "started_at": {
+      "format": "date-time",
+      "title": "Started At",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "pass",
+        "warn",
+        "fail",
+        "error",
+        "skipped"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "module_id",
+    "module_version",
+    "status",
+    "started_at",
+    "finished_at"
+  ],
+  "title": "TestResult",
+  "type": "object",
+  "x-netcaliper": {
+    "kind": "test_result",
+    "schema_version": 1
+  }
+}

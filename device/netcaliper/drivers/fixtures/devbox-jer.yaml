@@ -1,0 +1,214 @@
+# Recorded on the x86 dev box (2026-11-22) with all USB test hardware attached; identifiers anonymized.
+source: fixture:devbox-jer
+platform:
+  model: ''
+  compatible: []
+  dmi_product: x86 dev box
+  arch: x86_64
+  kernel: 7.0.0-43-generic
+  os_release:
+    ID: ubuntu
+    VERSION_ID: '26.04'
+    VERSION_CODENAME: resolute
+    PRETTY_NAME: Ubuntu 26.04.1 LTS
+  python: 3.14.4
+  drm: []
+usb:
+- path: 1-1
+  vid: 05e3
+  pid: '0610'
+  manufacturer: GenesysLogic
+  product: USB2.0 Hub
+  serial: ''
+  speed_mbps: 480
+  interface_drivers:
+  - hub
+- path: 1-1.1
+  vid: 0e8d
+  pid: '7610'
+  manufacturer: MediaTek
+  product: WiFi
+  serial: '93653900'
+  speed_mbps: 480
+  interface_drivers:
+  - mt76x0u
+- path: 1-1.2
+  vid: 0bda
+  pid: '8176'
+  manufacturer: Realtek
+  product: 802.11n WLAN Adapter
+  serial: EA20E45C
+  speed_mbps: 480
+  interface_drivers:
+  - rtl8192cu
+- path: 1-1.3
+  vid: '1915'
+  pid: '0102'
+  manufacturer: RFStorm
+  product: Research Firmware
+  serial: ''
+  speed_mbps: 12
+  interface_drivers: []
+- path: 1-10
+  vid: 0bda
+  pid: '5411'
+  manufacturer: Generic
+  product: 4-Port USB 2.0 Hub
+  serial: ''
+  speed_mbps: 480
+  interface_drivers:
+  - hub
+- path: 1-10.1
+  vid: 0bda
+  pid: '2832'
+  manufacturer: Generic
+  product: RTL2832U
+  serial: 46CBB14F
+  speed_mbps: 480
+  interface_drivers:
+  - usbfs
+- path: 1-14
+  vid: '8087'
+  pid: '0026'
+  manufacturer: ''
+  product: ''
+  serial: ''
+  speed_mbps: 12
+  interface_drivers:
+  - btusb
+- path: 1-4
+  vid: 0bda
+  pid: '2838'
+  manufacturer: Realtek
+  product: RTL2838UHIDIR
+  serial: F03D5583
+  speed_mbps: 480
+  interface_drivers:
+  - dvb_usb_rtl28xxu
+- path: 2-1
+  vid: 05e3
+  pid: '0617'
+  manufacturer: GenesysLogic
+  product: USB3.0 Hub
+  serial: ''
+  speed_mbps: 5000
+  interface_drivers:
+  - hub
+- path: 2-1.4
+  vid: 0b95
+  pid: '1790'
+  manufacturer: ASIX Elec.
+  product: AX88179
+  serial: AF76A7B2
+  speed_mbps: 5000
+  interface_drivers:
+  - ax88179_178a
+net:
+- name: enp3s0
+  mac: a4:bb:6d:a9:c4:c4
+  driver: r8169
+  bus: pci
+  usb_path: null
+  wireless: false
+  phy: null
+  has_phydev: true
+  operstate: up
+  default_route: true
+  link_modes:
+  - 10baseT/Half
+  - 10baseT/Full
+  - 100baseT/Half
+  - 100baseT/Full
+  - 1000baseT/Full
+- name: enx00051bfaabf1
+  mac: 00:05:1b:fa:ab:f1
+  driver: ax88179_178a
+  bus: usb
+  usb_path: 2-1.4
+  wireless: false
+  phy: null
+  has_phydev: false
+  operstate: down
+  default_route: false
+  link_modes:
+  - 10baseT/Half
+  - 10baseT/Full
+  - 100baseT/Half
+  - 100baseT/Full
+  - 1000baseT/Half
+  - 1000baseT/Full
+- name: wlo1
+  mac: 00:42:38:ce:fd:e4
+  driver: iwlwifi
+  bus: pci
+  usb_path: null
+  wireless: true
+  phy: phy0
+  has_phydev: false
+  operstate: down
+  default_route: false
+  link_modes: []
+- name: wlx0013effba56b
+  mac: 00:13:ef:fb:a5:6b
+  driver: rtl8192cu
+  bus: usb
+  usb_path: 1-1.2
+  wireless: true
+  phy: phy4
+  has_phydev: false
+  operstate: down
+  default_route: false
+  link_modes: []
+- name: wlx9cefd50ceb48
+  mac: 9c:ef:d5:0c:eb:48
+  driver: mt76x0u
+  bus: usb
+  usb_path: 1-1.1
+  wireless: true
+  phy: phy3
+  has_phydev: false
+  operstate: down
+  default_route: false
+  link_modes: []
+wiphys:
+- name: phy0
+  iw_info_file: iw/iw_phy_iwlwifi.txt
+- name: phy3
+  iw_info_file: iw/iw_phy_mt76x0u.txt
+- name: phy4
+  iw_info_file: iw/iw_phy_rtl8192cu.txt
+bluetooth:
+- name: hci0
+  driver: btusb
+  bus: usb
+  usb_path: 1-14
+power_supplies: []
+kernel_modules:
+- ax88179_178a
+- btusb
+- dvb_usb_rtl28xxu
+- e4000
+- iwlwifi
+- mt76x0u
+- r8169
+- rtl2832
+- rtl2832_sdr
+- rtl8192cu
+tools:
+  iw: /usr/sbin/iw
+  ip: /usr/sbin/ip
+  ethtool: /usr/sbin/ethtool
+  wpa_supplicant: /usr/sbin/wpa_supplicant
+  nmap: /usr/bin/nmap
+  arp-scan: null
+  tcpdump: /usr/bin/tcpdump
+  tshark: /usr/bin/tshark
+  iperf3: null
+  nft: /usr/sbin/nft
+  rtl_433: null
+  rtl_power: null
+  rtl_test: null
+  bluetoothctl: /usr/bin/bluetoothctl
+  cage: null
+  chromium: null
+  chromium-browser: null

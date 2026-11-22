@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: GPL-3.0-only
+name: device-ci
+on:
+  push:
+    branches: [main]
+    paths: ["device/**", "schemas/**", ".github/workflows/device-ci.yml"]
+  pull_request:
+    paths: ["device/**", "schemas/**", ".github/workflows/device-ci.yml"]
+  schedule:
+    - cron: "17 6 * * 1"  # weekly arm64 run
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: device
+
+jobs:
+  x86:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: device/pyproject.toml
+      - run: pip install -e '.[dev]'
+      - run: ruff check . && ruff format --check .
+      - run: mypy
+      - run: netcaliper schemas --check
+      - run: pytest -q
+        env:
+          NETCALIPER_HW: mock:uconsole-cm4-full
+
+  # Repo is private for now: no free native arm64 runners, so emulate (slow — main/weekly only).
+  # Switch to `runs-on: ubuntu-24.04-arm` once the repo is public.
+  arm64:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["python:3.11-slim-bookworm", "python:3.13-slim-trixie"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - name: test on arm64 (${{ matrix.image }})
+        working-directory: .
+        run: >
+          docker run --rm --platform linux/arm64 -v "$PWD:/src" -w /src/device
+          -e NETCALIPER_HW=mock:uconsole-cm4-full ${{ matrix.image }}
+          sh -c "pip install -q -e '.[dev]' && pytest -q"

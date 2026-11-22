@@ -1,0 +1,42 @@
+Wiphy phy0
+	wiphy index: 0
+	max # scan SSIDs: 10
+	Supported Ciphers:
+		* WEP40 (00-0f-ac:1)
+		* TKIP (00-0f-ac:2)
+		* CCMP-128 (00-0f-ac:4)
+		* CMAC (00-0f-ac:6)
+	Available Antennas: TX 0 RX 0
+	Supported interface modes:
+		 * IBSS
+		 * managed
+		 * AP
+		 * P2P-client
+		 * P2P-GO
+		 * P2P-device
+		 * monitor
+	Band 1:
+		Capabilities: 0x1062
+			HT20/HT40
+			Static SM Power Save
+			RX HT20 SGI
+			RX HT40 SGI
+			No RX STBC
+			Max AMSDU length: 3839 bytes
+		HT TX/RX MCS rate indexes supported: 0-7
+		Frequencies:
+			* 2412.0 MHz [1] (20.0 dBm)
+			* 2437.0 MHz [6] (20.0 dBm)
+			* 2462.0 MHz [11] (20.0 dBm)
+			* 2484.0 MHz [14] (disabled)
+	Band 2:
+		Capabilities: 0x1062
+			HT20/HT40
+		HT TX/RX MCS rate indexes supported: 0-7
+		VHT Capabilities (0x00001020):
+			Max MPDU length: 3895
+			Supported Channel Width: neither 160 nor 80+80
+		Frequencies:
+			* 5180.0 MHz [36] (20.0 dBm)
+			* 5200.0 MHz [40] (20.0 dBm)
+			* 5745.0 MHz [149] (20.0 dBm)

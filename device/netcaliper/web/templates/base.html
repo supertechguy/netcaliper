@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}netcaliper{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/theme.css">
+  <script src="/static/vendor/htmx-2.0.11.min.js" defer></script>
+  <script src="/static/vendor/alpine-3.17.5.min.js" defer></script>
+  <script src="/static/js/nav.js" defer></script>
+</head>
+<body class="{% block bodyclass %}{% endblock %}">
+  <header class="statusbar" hx-get="/partials/status" hx-trigger="load, every 10s" hx-swap="innerHTML">
+    <span class="brand">netcaliper</span>
+  </header>
+  <main id="main">{% block main %}{% endblock %}</main>
+  <footer class="keyhints">{% block keyhints %}<kbd>Esc</kbd> back · <kbd>?</kbd> help{% endblock %}</footer>
+  <div id="help" class="overlay" hidden>
+    <div class="panel">
+      <h2>Keys</h2>
+      <table>
+        <tr><td><kbd>← ↑ → ↓</kbd></td><td>move between tiles / items</td></tr>
+        <tr><td><kbd>Enter</kbd></td><td>open</td></tr>
+        <tr><td><kbd>Esc</kbd> <kbd>Backspace</kbd></td><td>back / home</td></tr>
+        <tr><td><kbd>h</kbd></td><td>home</td></tr>
+        {% for s in sections %}<tr><td><kbd>{{ s.hotkey }}</kbd></td><td>{{ s.title }}</td></tr>{% endfor %}
+        <tr><td><kbd>?</kbd></td><td>toggle this help</td></tr>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

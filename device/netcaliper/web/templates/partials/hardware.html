@@ -1,0 +1,24 @@
+<p><strong>{{ inv.platform.name }}</strong> <span class="dim">{{ inv.platform.os }} · Python {{ inv.platform.python }}</span></p>
+{% for w in inv.warnings %}<p class="warn">⚠ {{ w }}</p>{% endfor %}
+{% for n in inv.platform.notes %}<p class="dim">· {{ n }}</p>{% endfor %}
+<table class="grid" data-list>
+  <thead><tr><th>Device</th><th>Role</th><th>Interface</th><th>Capabilities</th></tr></thead>
+  <tbody>
+  {% for d in inv.devices %}
+  <tr tabindex="0">
+    <td>{{ d.name }}<div class="dim small">{{ d.usb_id or d.driver or "" }}</div></td>
+    <td>{{ d.role or "—" }}</td>
+    <td>{{ d.ifname or d.phy or "" }}</td>
+    <td>
+      {% for cap, st in d.capabilities.items() %}
+      <span class="cap cap-{{ st.state }}" title="{{ st.reason }}">{{ cap.value }}</span>
+      {% endfor %}
+      {% for n in d.notes %}<div class="dim small">· {{ n }}</div>{% endfor %}
+    </td>
+  </tr>
+  {% endfor %}
+  {% for m in inv.missing %}
+  <tr class="missing" tabindex="0"><td>{{ m.name }}</td><td>—</td><td></td><td class="dim">not detected · {{ m.hint }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
