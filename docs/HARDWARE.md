@@ -27,7 +27,9 @@ for, its limits, and how it is recognized. Run `netcaliper doctor` to see what i
 ## Platform notes
 - **CM4 is USB 2.0 only.** All USB devices share 480 Mb/s; GbE throughput tests need CM5/Pi 5.
   Several dongles on battery need a powered hub.
-- uConsole is detected from the device tree (ClockworkPi compatible string, or CM + DSI panel + AXP PMIC).
-  The heuristic will be refined with a recording from the real unit
-  (`netcaliper doctor --record uconsole.yaml --anonymize`).
-- Reference OS image: ClockworkPi `uConsole_CM4_v3.1_64bit`.
+- uConsole is detected by its keyboard MCU (`1eaf:0024`), with CM + DSI panel + AXP PMIC as fallback.
+  Fixture `uconsole-cm4` is an anonymized recording of the real unit.
+- The uConsole has **no Ethernet jack**: the CM4's `eth0` (bcmgenet) exists in the kernel but is
+  forced `unused`. Wired testing needs a USB NIC.
+- USB: one internal Genesys hub (`05e3:0608`) shared by the keyboard and the external ports.
+- Reference OS image: ClockworkPi `uConsole_CM4_v3.1_64bit` (Debian 13 Trixie, Python 3.13).

@@ -37,7 +37,7 @@ def _by_name(inv, part):  # type: ignore[no-untyped-def]
 
 def test_uconsole_roles_and_quirks() -> None:
     inv = detect(load_fixture("uconsole-cm4-full"))
-    assert inv.platform.is_uconsole and inv.platform.id == "rpi-cm4" and inv.platform.battery_percent == 82
+    assert inv.platform.is_uconsole and inv.platform.id == "rpi-cm4" and inv.platform.battery_percent == 100
     assert _by_name(inv, "brcmfmac").role == "mgmt"
     assert _by_name(inv, "brcmfmac").capabilities[C.WIFI_MONITOR].state == "absent"
     assert _by_name(inv, "AX88179").role == "test-wired"
@@ -53,6 +53,15 @@ def test_uconsole_roles_and_quirks() -> None:
     )
     assert {m.kind for m in inv.missing} == {"probe", "poe", "wideband_sdr", "gps"}
     assert inv.warnings == []
+
+
+def test_real_uconsole_recording() -> None:
+    inv = detect(load_fixture("uconsole-cm4"))
+    assert inv.platform.is_uconsole and inv.platform.os.startswith("Debian GNU/Linux 13")
+    eth = _by_name(inv, "bcmgenet")
+    assert eth.role == "unused" and "no Ethernet jack" in " ".join(eth.notes)
+    assert _by_name(inv, "brcmfmac").role == "mgmt"
+    assert "no wired test interface detected" in inv.warnings
 
 
 def test_future_hardware_autodetected() -> None:

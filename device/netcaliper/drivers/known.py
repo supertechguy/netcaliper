@@ -35,6 +35,12 @@ KNOWN_USB: dict[str, KnownUsb] = {
     "1d50:6089": KnownUsb("wideband_sdr", "HackRF One"),
 }
 
+# USB devices that identify the host platform.
+PLATFORM_USB: dict[str, str] = {"1eaf:0024": "uconsole"}  # uConsole keyboard/trackball MCU
+
+# NICs that exist in the kernel but have no physical jack on a given platform.
+NO_JACK: dict[str, set[str]] = {"uconsole": {"bcmgenet"}}
+
 # netcaliper's own boards identify by USB product string (USB CDC, JSON lines — see hardware/).
 PRODUCT_STRINGS: dict[str, DeviceKind] = {"netcaliper-probe": "probe", "netcaliper-poe": "poe"}
 

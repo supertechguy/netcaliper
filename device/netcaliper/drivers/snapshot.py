@@ -123,9 +123,24 @@ def _read(p: Path) -> str | None:
         return None
 
 
+# Debian/Pi OS keep iw, ethtool, nft, wpa_supplicant in /usr/sbin, which is not on an unprivileged
+# user's PATH — and our services run unprivileged. Always search the sbin dirs too.
+_SBIN = ("/usr/local/sbin", "/usr/sbin", "/sbin")
+
+
+def which(tool: str) -> str | None:
+    path = os.pathsep.join([os.environ.get("PATH", ""), *_SBIN])
+    return shutil.which(tool, path=path)
+
+
 def _run(argv: list[str], timeout: float = 5.0) -> str:
+    exe = which(argv[0])
+    if exe is None:
+        return ""
     try:
-        return subprocess.run(argv, capture_output=True, text=True, timeout=timeout, check=False).stdout
+        return subprocess.run(
+            [exe, *argv[1:]], capture_output=True, text=True, timeout=timeout, check=False
+        ).stdout
     except (OSError, subprocess.TimeoutExpired):
         return ""
 
@@ -283,7 +298,7 @@ def collect_real(sysfs: Path = Path("/sys")) -> SystemSnapshot:
     snap.kernel_modules = sorted(
         line.split()[0] for line in (_read(Path("/proc/modules")) or "").splitlines() if line.strip()
     )
-    snap.tools = {t: shutil.which(t) for t in TOOLS}
+    snap.tools = {t: which(t) for t in TOOLS}
     return snap
 
 

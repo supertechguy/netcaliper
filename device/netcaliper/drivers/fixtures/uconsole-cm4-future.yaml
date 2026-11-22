@@ -1,20 +1,19 @@
-# Synthetic: uconsole-cm4-full plus future hardware (MT7921AU 6E, RTL8156B 2.5 GbE, probe, PoE).
+# uconsole-cm4-full plus future hardware (MT7921AU 6E, RTL8156B 2.5 GbE, probe, PoE).
 source: fixture:uconsole-cm4-future
 platform:
   model: Raspberry Pi Compute Module 4 Rev 1.1
   compatible:
-  - raspberrypi
-  - 4-compute-module
-  - brcm
-  - bcm2711
+  - raspberrypi,4-compute-module
+  - brcm,bcm2711
+  dmi_product: ''
   arch: aarch64
-  kernel: 6.12.y-clockworkpi
+  kernel: 6.12.62-v8+
   os_release:
     ID: debian
-    VERSION_ID: '12'
-    VERSION_CODENAME: bookworm
-    PRETTY_NAME: Debian GNU/Linux 12 (bookworm)
-  python: 3.11.2
+    VERSION_ID: '13'
+    VERSION_CODENAME: trixie
+    PRETTY_NAME: Debian GNU/Linux 13 (trixie)
+  python: 3.13.5
   drm:
   - name: DSI-1
     status: connected
@@ -23,14 +22,29 @@ platform:
   - name: HDMI-A-1
     status: disconnected
     modes: []
+  - name: HDMI-A-2
+    status: disconnected
+    modes: []
 usb:
 - path: 1-1
-  vid: '2109'
-  pid: '3431'
+  vid: 05e3
+  pid: 0608
+  manufacturer: ''
   product: USB2.0 Hub
+  serial: ''
   speed_mbps: 480
   interface_drivers:
   - hub
+- path: 1-1.1
+  vid: 1eaf
+  pid: '0024'
+  manufacturer: ClockworkPI
+  product: uConsole
+  serial: ECAAC36E
+  speed_mbps: 12
+  interface_drivers:
+  - cdc_acm
+  - usbhid
 - path: 1-1.1
   vid: 0b95
   pid: '1790'
@@ -106,25 +120,44 @@ usb:
   - cdc_acm
 net:
 - name: eth0
-  mac: d8:3a:dd:00:00:01
+  mac: 2c:cf:67:64:8b:15
   driver: bcmgenet
   bus: platform
+  usb_path: null
+  wireless: false
+  phy: null
+  has_phydev: true
   operstate: down
+  default_route: false
   link_modes:
   - 10baseT/Half
   - 10baseT/Full
   - 100baseT/Half
   - 100baseT/Full
+  - 1000baseT/Half
   - 1000baseT/Full
-  has_phydev: true
+- name: lo
+  mac: 00:00:00:5c:db:b2
+  driver: null
+  bus: virtual
+  usb_path: null
+  wireless: false
+  phy: null
+  has_phydev: false
+  operstate: unknown
+  default_route: false
+  link_modes: []
 - name: wlan0
-  mac: d8:3a:dd:00:00:02
+  mac: 2c:cf:67:d8:da:72
   driver: brcmfmac
   bus: sdio
+  usb_path: null
   wireless: true
   phy: phy0
+  has_phydev: false
   operstate: up
   default_route: true
+  link_modes: []
 - name: enx00249b2f0c4a
   mac: 00:24:9b:2f:0c:4a
   driver: ax88179_178a
@@ -185,25 +218,38 @@ bluetooth:
 - name: hci0
   driver: hci_uart_bcm
   bus: platform
+  usb_path: null
 power_supplies:
 - name: axp20x-battery
   type: Battery
-  capacity: 82
-  status: Discharging
-- name: axp20x-ac
+  capacity: 100
+  status: Charging
+- name: axp22x-ac
   type: Mains
+  capacity: null
+  status: null
 kernel_modules:
 - ax88179_178a
+- axp20x_battery
 - brcmfmac
+- hci_uart
 - mt76x0u
 - rtl8192cu
 tools:
   iw: /usr/sbin/iw
-  ip: /usr/sbin/ip
+  ip: /usr/bin/ip
   ethtool: /usr/sbin/ethtool
+  wpa_supplicant: /usr/sbin/wpa_supplicant
   nmap: /usr/bin/nmap
+  arp-scan: /usr/sbin/arp-scan
+  tcpdump: /usr/bin/tcpdump
+  tshark: /usr/bin/tshark
+  iperf3: /usr/bin/iperf3
   nft: /usr/sbin/nft
   rtl_433: /usr/bin/rtl_433
   rtl_power: /usr/bin/rtl_power
+  rtl_test: /usr/bin/rtl_test
+  bluetoothctl: /usr/bin/bluetoothctl
   cage: /usr/bin/cage
   chromium: /usr/bin/chromium
+  chromium-browser: null

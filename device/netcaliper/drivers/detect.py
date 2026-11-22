@@ -15,6 +15,8 @@ from .known import (
     EXPECTED,
     INTERNAL_WIFI_DRIVERS,
     KNOWN_USB,
+    NO_JACK,
+    PLATFORM_USB,
     PRODUCT_STRINGS,
 )
 from .snapshot import NetInterface, SystemSnapshot, UsbDevice
@@ -73,8 +75,12 @@ def detect_platform(snap: SystemSnapshot) -> PlatformSummary:
     compat = " ".join(p.compatible).lower()
     has_dsi = any(c.name.startswith("DSI") and c.status == "connected" for c in p.drm)
     has_axp = any("axp" in ps.name.lower() for ps in snap.power_supplies)
+    has_kbd = any(PLATFORM_USB.get(f"{u.vid}:{u.pid}") == "uconsole" for u in snap.usb)
     is_uconsole = (
-        "clockwork" in compat or "uconsole" in compat or (pid.startswith("rpi-cm") and has_dsi and has_axp)
+        "clockwork" in compat
+        or "uconsole" in compat
+        or has_kbd
+        or (pid.startswith("rpi-cm") and has_dsi and has_axp)
     )
     battery = next((ps.capacity for ps in snap.power_supplies if ps.type == "Battery"), None)
     name = model or p.dmi_product or p.arch
@@ -321,6 +327,11 @@ def detect(snap: SystemSnapshot, role_overrides: dict[str, Role] | None = None) 
         )
 
     plat = detect_platform(snap)
+    no_jack = NO_JACK.get("uconsole", set()) if plat.is_uconsole else set()
+    for d in devices:
+        if d.kind == "nic" and d.driver in no_jack:
+            d.role = role_overrides.get(d.id, "unused") if role_overrides else "unused"
+            d.notes.append("no Ethernet jack on this platform")
     if plat.battery_percent is not None:
         devices.append(
             HardwareDevice(

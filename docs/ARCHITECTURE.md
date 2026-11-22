@@ -347,7 +347,20 @@ their apt repo alone, and refuses on Python < 3.11. Stock Pi OS + ClockworkPi ap
 also work but is secondary. Kiosk notes for this image: it ships a desktop + display manager, so
 kiosk mode disables the DM (restorable via `uninstall.sh` / `--no-kiosk`); the DSI panel is natively
 portrait (720×1280), so rotation is applied in the cage session (`wlr-randr --transform`) based on the
-detected DRM connector, not taken from the desktop's config. Steps: apt deps (package
+detected DRM connector, not taken from the desktop's config.
+
+**Facts from the real unit (2026-11-22):** Debian 13 Trixie, Python 3.13.5, kernel `6.12.62-v8+`
+(ClockworkPi), CM4 4 GB, 238 GB SD, `lightdm` + labwc desktop, ClockworkPi apt repo on its `bookworm`
+channel. Installer implications:
+- `/usr/sbin` is not on unprivileged users' PATH — code resolves tools via `drivers.snapshot.which()`.
+- The image's labwc env sets `WLR_DRM_FORCE_LIBLIFTOFF=1`; carry it into the cage kiosk session.
+- `mkinitramfs` fails (`failed to determine device for /`, root is `/dev/root`), which wedges apt
+  upgrades. Firmware boots without an initramfs (`root=PARTUUID=…`), so the installer drops in
+  `/etc/initramfs-tools/conf.d/root-device-workaround` (`MODULES=most`) and runs `dpkg --configure -a`
+  before installing anything.
+- Debian's `rtl-sdr` package does **not** blacklist the DVB modules — the installer must.
+- uConsole has no Ethernet jack; the CM4's `eth0` (bcmgenet) is forced `unused`. The keyboard MCU
+  (`1eaf:0024`) identifies the platform. Steps: apt deps (package
 names resolved per release, e.g. `chromium` vs `chromium-browser`) → users (`netcaliper`, `ncal-kiosk`)
 → `/opt/netcaliper` venv (system Python) → `/etc/netcaliper`, `/var/lib/netcaliper` → modprobe
 blacklist (`dvb_usb_rtl28xxu`, `rtl2832`, `rtl2832_sdr`) → udev rules (RTL-SDR, nRF24 `1915:0102`,

@@ -7,7 +7,7 @@
 ## Decisions
 | Date | Decision |
 |---|---|
-| 2026-11-22 | uConsole base image: ClockworkPi `uConsole_CM4_v3.1_64bit` (Debian release detected at install) |
+| 2026-11-22 | uConsole base image: ClockworkPi `uConsole_CM4_v3.1_64bit` — confirmed Debian 13 Trixie, Python 3.13.5, CM4 4 GB |
 | 2026-11-22 | Cloud host: `netcaliper.supertechguy.net` (Worker custom domain, `workers.dev` disabled) |
 | 2026-11-22 | License: GPL-3.0; **no scapy** (GPL-2.0-only) — dpkt + own builders/capture |
 | 2026-11-22 | Repo private until end of Phase 1, then public; commits use GitHub noreply email |
