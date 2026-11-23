@@ -416,5 +416,5 @@ netcaliper/
   (multiple DHCP servers for rogue tests), an LLDP/CDP emitter built on our own frame builders, etc. Real-protocol integration tests without hardware; run in CI (GitHub runners have sudo).
 - Cloud: Vitest with `@cloudflare/vitest-pool-workers` + local D1; a budget test asserts a max-size
   sync request stays under 50 queries.
-- CI: device tests on x86 and arm64 (native arm64 runner if the repo is public, QEMU otherwise),
-  Python 3.11 / 3.13 / 3.14 matrix.
+- CI: device tests on x86 (Python 3.11 / 3.13 / 3.14) and native arm64 runners (3.11 / 3.13); an
+  installer job does a real `--dev` install/re-run/uninstall on a systemd runner.

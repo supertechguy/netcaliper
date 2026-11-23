@@ -14,6 +14,7 @@
 | 2026-11-22 | Cloud language: TypeScript + Hono (Python Workers rejected for now: 10 ms free-tier CPU) |
 | 2026-11-23 | Remote view/control via opt-in VNC (`wayvnc` in the kiosk session, auth + TLS/RSA-AES, root netns only) |
 | 2026-11-23 | Remote *browser* access (login + TLS) moved from Phase 1 to Phase 4 (with enrollment); VNC covers remote use until then |
+| 2026-11-23 | Repo made public (end of Phase 1); history rewritten so all commits use the noreply email; arm64 CI moved to native runners |
 | 2026-11-23 | Hotplug by polling a USB/netdev signature (5 s) instead of udev/netlink — portable, no extra deps |
 
 ## Phases

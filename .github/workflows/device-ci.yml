@@ -6,8 +6,6 @@ on:
     paths: ["device/**", "schemas/**", "installer/**", ".github/workflows/device-ci.yml"]
   pull_request:
     paths: ["device/**", "schemas/**", "installer/**", ".github/workflows/device-ci.yml"]
-  schedule:
-    - cron: "17 6 * * 1"  # weekly arm64 run
   workflow_dispatch:
 
 defaults:
@@ -78,23 +76,22 @@ jobs:
           ! id netcaliper 2>/dev/null
           ! sudo ip netns list | grep -q ncal-test
 
-  # Repo is private for now: no free native arm64 runners, so emulate (slow — main/weekly only).
-  # Switch to `runs-on: ubuntu-24.04-arm` once the repo is public.
+  # Native arm64 (free for public repos): same checks as x86 on the uConsole's architecture.
   arm64:
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     strategy:
       fail-fast: false
       matrix:
-        image: ["python:3.11-slim-bookworm", "python:3.13-slim-trixie"]
+        python: ["3.11", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
+      - uses: actions/setup-python@v5
         with:
-          platforms: arm64
-      - name: test on arm64 (${{ matrix.image }})
-        working-directory: .
-        run: >
-          docker run --rm --platform linux/arm64 -v "$PWD:/src" -w /src/device
-          -e NETCALIPER_HW=mock:uconsole-cm4-full ${{ matrix.image }}
-          sh -c "pip install -q -e '.[dev]' && pytest -q -m 'not netns'"
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: device/pyproject.toml
+      - run: pip install -e '.[dev]'
+      - run: mypy
+      - run: pytest -q -m 'not netns'
+        env:
+          NETCALIPER_HW: mock:uconsole-cm4-full
