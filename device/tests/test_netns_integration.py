@@ -24,9 +24,12 @@ def sh(*argv: str) -> str:
 
 @pytest.fixture
 def veth() -> tuple[str, str]:
-    a, b = f"ncv{os.getpid() % 10000}a", f"ncv{os.getpid() % 10000}b"
-    sh("ip", "link", "add", a, "type", "veth", "peer", "name", b)
-    mac = Path(f"/sys/class/net/{b}/address").read_text().strip()
+    n = os.getpid() % 10000
+    a, b = f"ncv{n}a", f"ncv{n}b"
+    # Explicit locally-administered MAC: udev's MACAddressPolicy would otherwise rewrite a random
+    # veth MAC moments after creation (seen on Ubuntu runners).
+    mac = f"02:00:00:00:{n // 100:02d}:{n % 100:02d}"
+    sh("ip", "link", "add", a, "type", "veth", "peer", "name", b, "address", mac)
     yield b, mac  # type: ignore[misc]
     subprocess.run([which("ip") or "ip", "link", "del", a], check=False, capture_output=True)
 

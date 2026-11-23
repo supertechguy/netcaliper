@@ -97,4 +97,4 @@ jobs:
         run: >
           docker run --rm --platform linux/arm64 -v "$PWD:/src" -w /src/device
           -e NETCALIPER_HW=mock:uconsole-cm4-full ${{ matrix.image }}
-          sh -c "pip install -q -e '.[dev]' && pytest -q"
+          sh -c "pip install -q -e '.[dev]' && pytest -q -m 'not netns'"
