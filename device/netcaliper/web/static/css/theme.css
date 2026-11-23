@@ -58,3 +58,18 @@ table.grid tr.missing td { color: var(--fg-faint); }
 .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: grid; place-items: center; }
 .overlay[hidden] { display: none; }
 .overlay .panel { background: var(--bg-2); border: 2px solid var(--fg-dim); border-radius: var(--radius); padding: 1em 2em; }
+
+/* AutoTest / results */
+.actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 12px; }
+.btn { min-height: 48px; }
+.btn-alt { color: var(--fg); background: var(--bg-3); border: 1px solid var(--fg-dim); }
+.st { display: inline-block; min-width: 5.2em; text-align: center; font-size: .75em; font-weight: bold;
+  border: 1px solid currentColor; border-radius: 4px; padding: 0 .3em; }
+.st-pass { color: var(--ok); } .st-warn { color: var(--warn); } .st-fail, .st-error { color: var(--fail); }
+.st-skipped, .st-pending { color: var(--fg-faint); } .st-running { color: var(--info); animation: pulse 1s infinite alternate; }
+@keyframes pulse { from { opacity: 1; } to { opacity: .45; } }
+table.steps td.badge { width: 6.5em; } table.steps td.name { width: 14em; }
+table.steps tr.st-pending td, table.steps tr.st-skipped td { color: var(--fg-dim); }
+.result .module { padding: 2px 6px; border-radius: var(--radius); }
+.result .module h2 { margin: .6em 0 .2em; }
+table.metrics { width: auto; min-width: 50%; } table.metrics td:first-child { width: 14em; }

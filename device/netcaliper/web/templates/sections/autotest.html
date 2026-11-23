@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}AutoTest · netcaliper{% endblock %}
+{% block main %}
+<section class="page autotest">
+  <h1>AutoTest</h1>
+  <div class="actions">
+    {% for p in profiles %}
+    <button class="btn" hx-post="/autotest/start/{{ p.id | urlencode }}" hx-target="#run" hx-swap="innerHTML"
+            {% if loop.first %}autofocus{% endif %} title="{{ p.description }}">
+      Run {{ p.name }}{% if p.source != "builtin" %} <span class="small">({{ p.source }})</span>{% endif %}
+    </button>
+    {% endfor %}
+    <button class="btn btn-alt" hx-post="/autotest/cancel" hx-swap="none">Cancel</button>
+    <span class="dim small">
+      {% if iface %}on {{ iface.name }}{% if iface.ifname %} · {{ iface.ifname }}{% endif %}{% else %}<span class="warn">no wired test interface</span>{% endif %}
+      {% if mock %} · simulated network{% endif %}
+    </span>
+  </div>
+  <div id="run">{% if run %}{% include "partials/run.html" %}{% else %}<p class="dim">Press <kbd>Enter</kbd> to run.</p>{% endif %}</div>
+</section>
+{% endblock %}
+{% block keyhints %}<kbd>Enter</kbd> run · <kbd>←→</kbd> choose · <kbd>l</kbd> results · <kbd>Esc</kbd> back{% endblock %}

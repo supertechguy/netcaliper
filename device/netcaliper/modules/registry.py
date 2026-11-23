@@ -19,7 +19,7 @@ def register(cls: type[TestModule[Any]]) -> type[TestModule[Any]]:
 
 
 def all_modules() -> dict[str, type[TestModule[Any]]]:
-    from . import system  # noqa: F401  (registers built-ins)
+    from . import system, wired  # noqa: F401  (registers built-ins)
 
     mods = dict(_BUILTIN)
     for ep in entry_points(group="netcaliper.modules"):

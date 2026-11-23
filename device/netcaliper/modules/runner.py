@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
@@ -12,6 +13,7 @@ from ..core.engagement import ScopeError
 from ..core.ids import utcnow
 from ..core.records import TestResult
 from ..core.repo import Repository
+from ..core.rpc import RpcError
 from .base import Activity, ModuleResult, RunContext, TestModule
 from .thresholds import Threshold, worst
 
@@ -95,7 +97,11 @@ class ModuleRunner:
                 engagement_id=decision.engagement_id,
             )
         try:
-            result = await cls().run(ctx, cfg)
+            result = await self._execute(ctx, cls, cfg)
+        except TimeoutError:
+            result = ModuleResult(status="error", message=f"timed out after {cls.timeout_s:.0f} s")
+        except RpcError as e:
+            result = ModuleResult(status="error", message=f"test-plane agent: {e.code} {e.message}")
         except Exception as e:  # a module crash must never take down the run
             result = ModuleResult(status="error", message=f"{type(e).__name__}: {e}")
 
@@ -107,6 +113,25 @@ class ModuleRunner:
                 "runner", "active.end", {"module": cls.id, "run_id": ctx.run_id, "status": result.status}
             )
         return await self._finish(ctx, step, cls.version, started, result)
+
+    @staticmethod
+    async def _execute(ctx: RunContext, cls: type[TestModule[Any]], cfg: Any) -> ModuleResult:
+        """test-ns modules run inside the agent (real hardware) or in-process against MockNet."""
+        if cls.executor == "test-ns" and ctx.agent is not None:
+            raw = await ctx.agent.call(
+                "module.run",
+                {
+                    "module": cls.id,
+                    "config": cfg.model_dump(mode="json"),
+                    "ifname": ctx.ifname,
+                    "run_id": ctx.run_id,
+                    "session": ctx.session,
+                },
+                timeout=cls.timeout_s + 10,
+            )
+            ctx.session.update(raw.get("session") or {})
+            return ModuleResult.model_validate(raw["result"])
+        return await asyncio.wait_for(cls().run(ctx, cfg), cls.timeout_s)
 
     async def _finish(
         self, ctx: RunContext, step: ModuleStep, version: str, started: Any, r: ModuleResult

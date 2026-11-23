@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import operator
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 from pydantic import BaseModel, field_validator
 
@@ -46,7 +46,7 @@ class Threshold(BaseModel):
         assert m
         return _OPS[m.group(1)](value, float(m.group(2)))
 
-    def evaluate(self, metrics: dict[str, object]) -> Status | None:
+    def evaluate(self, metrics: Mapping[str, object]) -> Status | None:
         v = metrics.get(self.metric)
         if not isinstance(v, int | float) or isinstance(v, bool):
             return None

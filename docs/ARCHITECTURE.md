@@ -185,16 +185,29 @@ class TestModule(ABC, Generic[C]):
   interface/VLAN/SSID it applies to. Profiles are versioned and syncable from the cloud.
 - A module registry discovers modules via entry points so future hardware modules are plug-ins.
 
+**Execution (Phase 2).** Modules talk to the network through a `TestNet` protocol (`net/base.py`):
+`RealNet` (our packet code) in the agent, `MockNet` (scenario knobs: rogue DHCP, rogue RA, dead
+gateway, …) in mock mode, so the whole AutoTest runs on x86. In real mode the runner in core does the
+capability check, thresholds and persistence, and sends `executor = "test-ns"` modules to the agent's
+`module.run` RPC with the interface (resolved by **role**, `test-wired`) and the run's `session`
+(e.g. the DHCP lease); the agent returns the result plus the updated session, so it stays stateless
+between calls. The agent only runs PASSIVE test-ns modules — ACTIVE modules are refused there until
+a signed authorization from core's scope guard can be handed across. `AutoTest` (`modules/autotest.py`)
+runs profiles one at a time; `background` modules (the LLDP/CDP/EDP listener) start when reached
+and are collected at the end so their listening window overlaps the rest. Profiles are YAML:
+built-in `netcaliper/profiles/`, local overrides in `/etc/netcaliper/profiles/` (same id wins).
+
 ### Key implementation choices
 
 | Area | Choice | Why |
 |---|---|---|
-| DHCP | own client (dpkt parse + our builders over `AF_PACKET`) | measure each DORA phase, **collect every OFFER** (rogue detection) — `dhclient` stops at the first. Lease then applied with pyroute2 in the netns. |
+| DHCP | own client (dpkt parse + our builders over `AF_PACKET`) | measure each DORA phase, **collect every OFFER** for a window after the first (rogue detection) — `dhclient` stops at the first. Only the chosen server's ACK/NAK is accepted. Lease applied with `ip addr`/`ip route` in the netns. |
 | LLDP/CDP/EDP | **own `AF_PACKET` receiver + own TLV parsers (dpkt for CDP); optional LLDP transmit** | `lldpd` is a long-running daemon that transmits by default, isn't netns/test-session aware, and hides link-up→first-frame timing. We need on-demand capture per test, precise timing, VLAN-subif awareness, and raw TLVs in results. LLDP-MED and EDP parsers are ours; dpkt covers CDP. |
-| Link | rtnetlink + ethtool netlink (`linkmodes`, `linkstate`) | advertised vs. partner vs. negotiated, link-up timing, flap counter from carrier events |
-| VLAN | 802.1Q subinterfaces in the netns, one per VLAN profile | each gets its own DHCP/DNS/target run |
-| 802.1X | `wpa_supplicant -Dwired` / nl80211, driven via control socket | event timestamps → auth timing |
-| DNS / ping / TCP / HTTP / FTP | dnspython, icmplib, asyncio sockets, httpx, aioftp | async, timing-accurate, no subprocess per probe |
+| Link | sysfs (`carrier`, `speed`, `duplex`, `carrier_changes`) + `ethtool --json` (link modes) | advertised vs. partner vs. negotiated (downshift warning), link-up timing when we bring it up, flap counter |
+| VLAN | 802.1Q subinterfaces (`<if[:9]>.<vid>`) in the netns, created and removed per test | each VLAN gets its own DHCP run |
+| IPv6 | raw ICMPv6 RS (hop limit 255) → every RA collected; DHCPv6 Solicit → Advertise when the RA's M/O flags ask for it | rogue-RA check counts only *default* routers (lifetime > 0): lifetime-0 prefix advertisers (Thread/Matter border routers) are normal — seen on a real LAN |
+| 802.1X | `wpa_supplicant -Dwired`, polled via `wpa_cli status` | PEAP/TTLS/MD5 now (EAP-TLS needs a cert store); config with credentials in a 0600 file in the agent's PrivateTmp, removed after the attempt; values that could break out of the config are rejected |
+| DNS / ping / ARP / TCP / HTTP / FTP | own DNS queries (dpkt) to the **DHCP-learned servers**, raw ICMP + ARP, asyncio streams for TCP/HTTP(S)/FTP | timing breakdown (DNS / connect / TLS / first byte); never the host resolver — in the test netns `/etc/resolv.conf` belongs to the management network |
 | Wi-Fi scan | nl80211 scan with raw IE parsing (own IE decoder; dpkt `ieee80211` for monitor frames) + `survey dump` for noise/busy time | full security/PMF/WPS/QBSS/HT/VHT/HE decoding; monitor-mode beacon capture adds client discovery |
 | nmap | subprocess `nmap --privileged -oX -` (works with ambient caps), XML parsed | stream progress via `--stats-every` |
 | Vuln lookup | **decoupled**: scan in netns → CPEs → enrichment in core (see §8) | `vulners` NSE needs internet from the *test* network |
@@ -419,8 +432,11 @@ netcaliper/
 ## 13. Testing strategy
 - `pytest` + `pytest-asyncio`; default runs entirely on mocks (`NETCALIPER_HW=mock:uconsole-cm4-full`).
 - `@pytest.mark.hw` — needs real hardware, auto-skips when the capability isn't detected.
-- `@pytest.mark.netns` — needs root; builds veth pairs + throwaway netns with `dnsmasq`
-  (multiple DHCP servers for rogue tests), an LLDP/CDP emitter built on our own frame builders, etc. Real-protocol integration tests without hardware; run in CI (GitHub runners have sudo).
+- `@pytest.mark.netns` — needs root; builds throwaway namespaces around a bridge "switch" with
+  `dnsmasq` (DHCP/DNS/RA/DHCPv6 + a delayed rogue DHCP server), a tagged VLAN, an HTTP server and an
+  LLDP/CDP/EDP emitter built on our own frame builders; `hostapd -Dwired` for 802.1X accept/reject.
+  The client side runs the agent's `module.run` inside its netns — the same path as on the device.
+  Run in CI (GitHub runners have sudo) and on the uConsole.
 - Cloud: Vitest with `@cloudflare/vitest-pool-workers` + local D1; a budget test asserts a max-size
   sync request stays under 50 queries.
 - CI: device tests on x86 (Python 3.11 / 3.13 / 3.14) and native arm64 runners (3.11 / 3.13); an

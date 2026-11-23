@@ -1,0 +1,28 @@
+# Built-in AutoTest profile. Copy to /etc/netcaliper/profiles/<id>.yaml and edit to customise
+# (a file with the same id overrides this one). Thresholds turn metrics into pass/warn/fail;
+# modules only fail on their own for clear-cut cases (no link, no lease, nothing answers).
+id: default
+name: Wired AutoTest
+description: Link, switch port, DHCP, DNS, gateway, IPv6 and reachability — passive, client-level tests.
+steps:
+  - module: wired.link
+    thresholds:
+      - {metric: link_up_ms, warn: "> 5000", fail: "> 9000"}
+  - module: wired.switchinfo        # background: listens while the rest runs
+    config: {listen_s: 35}
+  - module: wired.dhcp
+    thresholds:
+      - {metric: offer_ms, warn: "> 1000", fail: "> 5000"}
+      - {metric: ack_ms, warn: "> 1000", fail: "> 5000"}
+  - module: net.dns
+    config: {names: [example.com]}
+    thresholds:
+      - {metric: lookup_ms, warn: "> 150", fail: "> 1000"}
+  - module: net.gateway
+    thresholds:
+      - {metric: loss_pct, warn: "> 0", fail: "> 20"}
+      - {metric: rtt_avg_ms, warn: "> 10", fail: "> 50"}
+  - module: wired.ipv6
+  - module: net.targets
+    thresholds:
+      - {metric: worst_ms, warn: "> 500", fail: "> 2000"}

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from .db import Database
 from .outbox import enqueue
@@ -63,3 +64,47 @@ class Repository:
             )
         else:
             raise TypeError(f"Repository cannot store {type(r).__name__}; use its dedicated store")
+
+    # ------------------------------------------------------------ reads (UI)
+
+    async def recent_runs(self, limit: int = 50) -> list[TestRun]:
+        cur = await self.db.conn.execute(
+            "SELECT id, site_id, profile_id, started_at, finished_at, status, clock_synced, summary"
+            " FROM test_runs ORDER BY started_at DESC LIMIT ?",
+            (limit,),
+        )
+        return [_run(r) for r in await cur.fetchall()]
+
+    async def get_run(self, run_id: str) -> TestRun | None:
+        cur = await self.db.conn.execute(
+            "SELECT id, site_id, profile_id, started_at, finished_at, status, clock_synced, summary"
+            " FROM test_runs WHERE id = ?",
+            (run_id,),
+        )
+        row = await cur.fetchone()
+        return _run(row) if row else None
+
+    async def results(self, run_id: str) -> list[TestResult]:
+        cur = await self.db.conn.execute(
+            "SELECT body FROM test_results WHERE run_id = ? ORDER BY started_at", (run_id,)
+        )
+        return [TestResult.model_validate_json(r[0]) for r in await cur.fetchall()]
+
+    async def findings(self, run_id: str) -> list[Finding]:
+        cur = await self.db.conn.execute(
+            "SELECT body FROM findings WHERE run_id = ? ORDER BY created_at", (run_id,)
+        )
+        return [Finding.model_validate_json(r[0]) for r in await cur.fetchall()]
+
+
+def _run(r: Any) -> TestRun:
+    return TestRun(
+        id=r[0],
+        site_id=r[1],
+        profile_id=r[2],
+        started_at=r[3],
+        finished_at=r[4],
+        status=r[5],
+        clock_synced=bool(r[6]),
+        summary=json.loads(r[7] or "{}"),
+    )

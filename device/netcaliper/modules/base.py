@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any, ClassVar, Generic, Literal, TypeVar
+from typing import Any, ClassVar, Generic, Literal, Protocol, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -16,6 +16,7 @@ from ..core.engagement import ScopeGuard
 from ..core.records import Finding, Status
 from ..drivers.base import Capability
 from ..drivers.registry import HardwareRegistry
+from ..net.base import TestNet
 
 
 class Activity(StrEnum):
@@ -45,6 +46,12 @@ async def _no_progress(pct: float, msg: str, data: dict[str, Any] | None = None)
     return None
 
 
+class Caller(Protocol):
+    async def call(
+        self, method: str, params: dict[str, Any] | None = None, timeout: float | None = None
+    ) -> Any: ...
+
+
 @dataclass
 class RunContext:
     run_id: str
@@ -52,6 +59,11 @@ class RunContext:
     guard: ScopeGuard
     progress: ProgressFn = _no_progress
     cancel: asyncio.Event = field(default_factory=asyncio.Event)
+    # Test-plane execution (executor = "test-ns"):
+    net: TestNet | None = None  # RealNet in the agent, MockNet in mock mode
+    ifname: str | None = None  # the test interface *inside the test netns*, resolved by role
+    session: dict[str, Any] = field(default_factory=dict)  # per-run shared state (e.g. the DHCP lease)
+    agent: Caller | None = None  # set in core when test-ns modules must run in the agent
 
 
 C = TypeVar("C", bound=ModuleConfig)
@@ -66,7 +78,16 @@ class TestModule(ABC, Generic[C]):
     optional: ClassVar[frozenset[Capability]] = frozenset()
     activity: ClassVar[Activity] = Activity.PASSIVE
     executor: ClassVar[Literal["test-ns", "root"]] = "root"
+    # Background modules (passive listeners) start when reached and are collected at the end of a run.
+    background: ClassVar[bool] = False
+    timeout_s: ClassVar[float] = 120.0  # hard ceiling for one run of this module
     Config: ClassVar[type[ModuleConfig]] = ModuleConfig
+
+    def net(self, ctx: RunContext) -> tuple[TestNet, str]:
+        """The TestNet and test interface; raises if this module was dispatched without them."""
+        if ctx.net is None or ctx.ifname is None:
+            raise RuntimeError(f"{self.id}: no test interface (test plane not available)")
+        return ctx.net, ctx.ifname
 
     @abstractmethod
     async def run(self, ctx: RunContext, cfg: C) -> ModuleResult: ...

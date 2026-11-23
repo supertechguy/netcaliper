@@ -66,6 +66,8 @@ jobs:
           netcaliper doctor --no-color || true
       - name: netns integration tests (root)
         run: |
+          # test-only servers: dnsmasq-base (no system service), hostapd (wired 802.1X authenticator)
+          sudo apt-get install -y -qq --no-install-recommends dnsmasq-base hostapd wpasupplicant
           python3 -m venv /tmp/v && /tmp/v/bin/pip install -q -e '.[dev]'
           sudo NETCALIPER_HW=mock:uconsole-cm4-full /tmp/v/bin/pytest -q -m netns -p no:cacheprovider
       - name: uninstall --purge leaves nothing behind

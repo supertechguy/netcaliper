@@ -1,0 +1,19 @@
+{# Live run view. Polls itself while running; the final response has no trigger, so polling stops. #}
+<div class="run"{% if not run.done %} hx-get="/partials/run/{{ run.run_id }}"
+     hx-trigger="every 1s [!(window.ncalAsleep && ncalAsleep())]" hx-swap="outerHTML"{% endif %}>
+  <h2>
+    {{ run.profile_name }}
+    <span class="st st-{{ run.status }}">{{ run.status | upper }}</span>
+    {% if run.message %}<span class="dim">{{ run.message }}</span>{% endif %}
+  </h2>
+  <table class="grid steps">
+    {% for s in run.steps %}
+    <tr class="st-{{ s.status }}">
+      <td class="badge"><span class="st st-{{ s.status }}">{{ s.status | upper }}</span></td>
+      <td class="name">{{ s.title }}{% if s.background and s.status == "running" %} <span class="dim small">listening</span>{% endif %}</td>
+      <td>{{ s.message }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% if run.done %}<p><a href="/results/{{ run.run_id }}">Details →</a></p>{% endif %}
+</div>

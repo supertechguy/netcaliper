@@ -19,13 +19,19 @@ from fastapi.templating import Jinja2Templates
 
 from .. import __version__
 from ..core.audit import AuditLog
+from ..core.clock import clock_synced
 from ..core.config import Settings
 from ..core.db import Database
 from ..core.ids import utcnow
 from ..core.outbox import Outbox
+from ..core.repo import Repository
 from ..core.rpc import RpcClient
 from ..core.testplane import TestPlane, watch_hotplug
 from ..drivers.registry import HardwareRegistry
+from ..modules.autotest import AutoTest, Busy, load_profiles
+from ..modules.registry import all_modules
+from ..modules.runner import ModuleRunner
+from ..net.base import TestNet
 from .kiosk import blank_after_s, on_ac, read_env
 from .sections import BY_SLUG, SECTIONS
 
@@ -43,8 +49,19 @@ def _is_loopback(host: str | None) -> bool:
         return False
 
 
+def _same_origin(request: Request) -> bool:
+    """State-changing requests from another origin (a page the kiosk browser was sent to) are refused."""
+    origin = request.headers.get("origin")
+    if origin is None or origin == "null":
+        return origin is None
+    return origin.split("://", 1)[-1] == request.headers.get("host")
+
+
 def create_app(
-    settings: Settings, registry: HardwareRegistry | None = None, plane: TestPlane | None = None
+    settings: Settings,
+    registry: HardwareRegistry | None = None,
+    plane: TestPlane | None = None,
+    test_net: TestNet | None = None,
 ) -> FastAPI:
     real = settings.hardware.mode == "real"
     if registry is None:
@@ -72,6 +89,22 @@ def create_app(
         db = await Database(settings.db_path).open()
         app.state.db = db
         app.state.outbox = Outbox(db)
+        app.state.repo = repo = Repository(db)
+        modules = all_modules()
+        net = test_net
+        if net is None and not real:
+            from ..net.mock import MockNet
+
+            net = MockNet(delay=0.4)  # a little latency so the live view is watchable
+        app.state.autotest = AutoTest(
+            ModuleRunner(modules, repo, AuditLog(db)),
+            reg,
+            repo,
+            net=net,
+            agent=RpcClient(settings.agent_socket, timeout=300) if real else None,
+            test_netns=settings.test_netns,
+            clock_synced=clock_synced,
+        )
         if app.state.plane is None and real:
             app.state.plane = TestPlane(RpcClient(settings.helper_socket), settings.test_netns, AuditLog(db))
         await refresh_and_place()
@@ -83,6 +116,7 @@ def create_app(
         try:
             yield
         finally:
+            await app.state.autotest.cancel()
             if watcher:
                 watcher.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
@@ -100,6 +134,8 @@ def create_app(
         # Until then: loopback only.
         if not _is_loopback(request.client.host if request.client else None):
             return JSONResponse({"detail": "remote access requires login (not yet enabled)"}, status_code=403)
+        if request.method not in ("GET", "HEAD", "OPTIONS") and not _same_origin(request):
+            return JSONResponse({"detail": "cross-origin request refused"}, status_code=403)
         return await call_next(request)
 
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
@@ -123,6 +159,112 @@ def create_app(
     async def home(request: Request) -> HTMLResponse:
         tiles = [{"s": s, "ready": ready(s.needs)} for s in SECTIONS]
         return templates.TemplateResponse(request, "home.html", ctx(request, tiles=tiles))
+
+    def profiles() -> dict[str, Any]:
+        return load_profiles(settings.config_dir / "profiles")
+
+    def wired_iface() -> Any:
+        devs = registry.inventory.by_role("test-wired")
+        return devs[0] if devs else None
+
+    @app.get("/s/autotest", response_class=HTMLResponse)
+    async def autotest_page(request: Request) -> HTMLResponse:
+        at: AutoTest = app.state.autotest
+        return templates.TemplateResponse(
+            request,
+            "sections/autotest.html",
+            ctx(
+                request,
+                section=BY_SLUG["autotest"],
+                profiles=list(profiles().values()),
+                run=at.current,
+                iface=wired_iface(),
+            ),
+        )
+
+    @app.post("/autotest/start/{profile_id}", response_class=HTMLResponse)
+    async def autotest_start(request: Request, profile_id: str) -> HTMLResponse:
+        p = profiles().get(profile_id)
+        if p is None:
+            raise HTTPException(404, "unknown profile")
+        at: AutoTest = app.state.autotest
+        try:
+            run = at.start(p)
+        except Busy:
+            run = at.current
+        return templates.TemplateResponse(request, "partials/run.html", ctx(request, run=run))
+
+    @app.post("/autotest/cancel")
+    async def autotest_cancel() -> dict[str, Any]:
+        await app.state.autotest.cancel()
+        return {"ok": True}
+
+    @app.get("/partials/run/{run_id}", response_class=HTMLResponse)
+    async def run_partial(request: Request, run_id: str) -> HTMLResponse:
+        run = app.state.autotest.history.get(run_id)
+        if run is None:
+            raise HTTPException(404)
+        return templates.TemplateResponse(request, "partials/run.html", ctx(request, run=run))
+
+    @app.get("/s/results", response_class=HTMLResponse)
+    async def results_page(request: Request) -> HTMLResponse:
+        runs = await app.state.repo.recent_runs(50)
+        return templates.TemplateResponse(
+            request, "sections/results.html", ctx(request, section=BY_SLUG["results"], runs=runs)
+        )
+
+    @app.get("/results/{run_id}", response_class=HTMLResponse)
+    async def result_page(request: Request, run_id: str) -> HTMLResponse:
+        repo: Repository = app.state.repo
+        run = await repo.get_run(run_id)
+        if run is None:
+            raise HTTPException(404)
+        titles = {k: v.title for k, v in all_modules().items()}
+        return templates.TemplateResponse(
+            request,
+            "result.html",
+            ctx(
+                request,
+                run=run,
+                results=await repo.results(run_id),
+                findings=await repo.findings(run_id),
+                titles=titles,
+            ),
+        )
+
+    # JSON API
+    @app.get("/api/v1/profiles")
+    async def api_profiles() -> list[dict[str, Any]]:
+        return [p.model_dump() for p in profiles().values()]
+
+    @app.post("/api/v1/autotest/{profile_id}")
+    async def api_autotest(profile_id: str) -> JSONResponse:
+        p = profiles().get(profile_id)
+        if p is None:
+            raise HTTPException(404, "unknown profile")
+        try:
+            run = app.state.autotest.start(p)
+        except Busy as e:
+            raise HTTPException(409, str(e)) from e
+        return JSONResponse(run.model_dump(mode="json"), status_code=202)
+
+    @app.get("/api/v1/runs")
+    async def api_runs(limit: int = 50) -> list[dict[str, Any]]:
+        return [r.model_dump(mode="json") for r in await app.state.repo.recent_runs(min(max(limit, 1), 500))]
+
+    @app.get("/api/v1/runs/{run_id}")
+    async def api_run(run_id: str) -> dict[str, Any]:
+        live = app.state.autotest.history.get(run_id)
+        repo: Repository = app.state.repo
+        run = await repo.get_run(run_id)
+        if run is None and live is None:
+            raise HTTPException(404)
+        return {
+            "run": run.model_dump(mode="json") if run else None,
+            "live": live.model_dump(mode="json") if live else None,
+            "results": [r.model_dump(mode="json") for r in await repo.results(run_id)],
+            "findings": [f.model_dump(mode="json") for f in await repo.findings(run_id)],
+        }
 
     @app.get("/s/{slug}", response_class=HTMLResponse)
     async def section(request: Request, slug: str) -> HTMLResponse:
