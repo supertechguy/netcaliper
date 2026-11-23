@@ -4,18 +4,11 @@
 # Settings come from /etc/netcaliper/kiosk.env (written by the installer, per platform).
 set -u
 URL="${KIOSK_URL:-http://127.0.0.1:8080/}"
-TRANSFORM="${KIOSK_TRANSFORM:-270}"
 
-# Rotate any output whose current mode is portrait (uConsole DSI panel is 720x1280 native).
-if command -v wlr-randr >/dev/null 2>&1; then
-	wlr-randr | awk '
-		/^[^ ]/ { out = $1 }
-		/current/ { split($1, wh, "x"); if (wh[2] + 0 > wh[1] + 0) print out }
-	' | while read -r output; do
-		[ -n "${KIOSK_OUTPUT:-}" ] && [ "$output" != "$KIOSK_OUTPUT" ] && continue
-		wlr-randr --output "$output" --transform "$TRANSFORM" || true
-	done
-fi
+DISPLAY_CTL="$(dirname "$0")/kiosk-display"
+
+"$DISPLAY_CTL" wake # a previous session may have died while blanked
+"$DISPLAY_CTL" rotate
 
 # Remote view/control (opt-in: install.sh --vnc). Listens in the root namespace only, so it is
 # reachable from the management network but never from a network under test (test netns).
@@ -33,6 +26,30 @@ while [ $i -lt 90 ] && ! curl -fsS -o /dev/null --max-time 2 "${URL%/}/api/v1/he
 	i=$((i + 1))
 	sleep 1
 done
+
+# Power saving: dim, then blank the backlight after inactivity (any key, trackball or VNC input
+# wakes it). Optional shorter timeouts on battery. 0 disables. The UI mirrors KIOSK_BLANK_S so the
+# input that wakes the screen doesn't also trigger an action. Started only now (core is up,
+# Chromium next) so its clock and the page's start together.
+BLANK="${KIOSK_BLANK_S:-600}"
+DIM="${KIOSK_DIM_S:-$((BLANK - 60))}"
+if [ "$BLANK" -gt 0 ] && command -v swayidle >/dev/null 2>&1; then
+	set -- -w
+	[ "$DIM" -gt 0 ] && [ "$DIM" -lt "$BLANK" ] &&
+		set -- "$@" timeout "$DIM" "$DISPLAY_CTL dim" resume "$DISPLAY_CTL wake"
+	set -- "$@" timeout "$BLANK" "$DISPLAY_CTL blank" resume "$DISPLAY_CTL wake"
+	BB="${KIOSK_BLANK_S_BATTERY:-0}"
+	if [ "$BB" -gt 0 ] && [ "$BB" -lt "$BLANK" ]; then
+		BD="${KIOSK_DIM_S_BATTERY:-$((BB - 30))}"
+		[ "$BD" -gt 0 ] && [ "$BD" -lt "$BB" ] &&
+			set -- "$@" timeout "$BD" "$DISPLAY_CTL dim --if-battery" resume "$DISPLAY_CTL wake"
+		set -- "$@" timeout "$BB" "$DISPLAY_CTL blank --if-battery" resume "$DISPLAY_CTL wake"
+	fi
+	(while :; do
+		swayidle "$@" || true
+		sleep 2
+	done) &
+fi
 
 for b in chromium chromium-browser; do
 	command -v "$b" >/dev/null 2>&1 && BROWSER="$b" && break

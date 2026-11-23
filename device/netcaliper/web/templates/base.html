@@ -9,8 +9,9 @@
   <script src="/static/vendor/alpine-3.17.5.min.js" defer></script>
   <script src="/static/js/nav.js" defer></script>
 </head>
-<body class="{% block bodyclass %}{% endblock %}">
-  <header class="statusbar" hx-get="/partials/status" hx-trigger="load, every 10s" hx-swap="innerHTML">
+<body class="{% block bodyclass %}{% endblock %}" data-blank-after="{{ blank_after }}">
+  <header class="statusbar" hx-get="/partials/status"
+          hx-trigger="load, every 10s [!(window.ncalAsleep && ncalAsleep())]" hx-swap="innerHTML">
     <span class="brand">netcaliper</span>
   </header>
   <main id="main">{% block main %}{% endblock %}</main>

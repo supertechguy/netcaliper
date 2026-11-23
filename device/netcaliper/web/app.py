@@ -26,6 +26,7 @@ from ..core.outbox import Outbox
 from ..core.rpc import RpcClient
 from ..core.testplane import TestPlane, watch_hotplug
 from ..drivers.registry import HardwareRegistry
+from .kiosk import blank_after_s, on_ac, read_env
 from .sections import BY_SLUG, SECTIONS
 
 HERE = Path(__file__).parent
@@ -111,6 +112,7 @@ def create_app(
             "inv": inv,
             "mock": registry.is_mock,
             "sections": SECTIONS,
+            "blank_after": blank_after_s(read_env(settings.kiosk_env), on_ac()),
             **extra,
         }
 

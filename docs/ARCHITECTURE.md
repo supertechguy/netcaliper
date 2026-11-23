@@ -376,6 +376,13 @@ channel. Installer implications:
 - Kiosk: `cage -s` on tty1 via `PAMName=` (logind session, no seatd). logind only activates a session
   on the foreground VT, so the unit runs `chvt 1` first (needed after stopping lightdm). The DSI panel
   is rotated by `wlr-randr --transform 270` inside the session; Chromium gets a fresh profile per start.
+- Power saving: `swayidle` in the session drives `kiosk-display dim|blank|wake` (defaults: dim to
+  level 1 at 540 s, backlight off at 600 s; `KIOSK_*` in `/etc/netcaliper/kiosk.env`, optional
+  `KIOSK_BLANK_S_BATTERY`). Blanking powers the backlight down (`bl_power=4`) rather than the output:
+  cage 0.3 has no wlr-output-power-management, and disabling the output (which does work via
+  wlr-randr) would disconnect VNC viewers. The page mirrors the timeout (`data-blank-after`) so the
+  waking key/click is swallowed and htmx polling pauses while dark. Test-plane interfaces stay
+  administratively down unless a test brings them up; the CPU governor is the image's `ondemand`.
 - VNC (opt-in `--vnc`, remembered): `wayvnc` inside the cage session (cage 0.3 offers screencopy +
   virtual keyboard/pointer, so view *and* control work); see SECURITY.md. `/etc/netcaliper` is 0751 so
   the kiosk user can reach `wayvnc/` without being able to list or read the rest.

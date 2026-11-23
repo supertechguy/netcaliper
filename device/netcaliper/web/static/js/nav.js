@@ -1,6 +1,29 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Keyboard-first navigation: arrows move focus spatially, letters jump to tiles, Esc goes back.
 (() => {
+  // Power saving: the kiosk session blanks the backlight after data-blank-after seconds without
+  // input. The page sees every key/pointer event, so it mirrors that timer: the gesture that wakes
+  // the screen is swallowed (pressing "s" to wake must not open Security), and polling pauses
+  // while dark.
+  const blankMs = (Number(document.body?.dataset.blankAfter) || 0) * 1000;
+  let lastInput = Date.now();
+  let swallowUntil = 0;
+  // Treat the last few seconds before blanking as asleep too: the page's clock starts a moment after
+  // swayidle's (Chromium startup), and swallowing one key while the screen is still dim is harmless.
+  const marginMs = Math.min(10000, blankMs / 10);
+  window.ncalAsleep = () => blankMs > 0 && Date.now() - lastInput >= blankMs - marginMs;
+  const ACTIONS = ["keydown", "keypress", "keyup", "mousedown", "mouseup", "pointerdown", "pointerup",
+                   "click", "dblclick", "auxclick", "contextmenu", "wheel"];
+  const guard = (e) => {
+    const now = Date.now();
+    if (window.ncalAsleep()) swallowUntil = now + 600; // the rest of this gesture is part of waking
+    lastInput = now;
+    if (now < swallowUntil) { e.preventDefault(); e.stopImmediatePropagation(); }
+  };
+  for (const t of ACTIONS) window.addEventListener(t, guard, { capture: true });
+  // Pure movement wakes the screen too (swayidle resumes on any input) but is never an action.
+  window.addEventListener("pointermove", () => { lastInput = Date.now(); }, { capture: true, passive: true });
+
   const focusables = () => [...document.querySelectorAll(
     "[data-grid] .tile, [data-list] [tabindex], main button, main a[href], main input, main select")];
   const typing = (el) => el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));

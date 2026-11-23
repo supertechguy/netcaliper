@@ -82,3 +82,35 @@ current_dm() {
 	if [[ -n $link && -e $link ]]; then basename "$link" .service; fi
 	return 0
 }
+
+# merge_env DEFAULTS TARGET — create TARGET from DEFAULTS, or append only the KEY=VALUE lines whose
+# KEY isn't already set there, so user edits survive re-installs.
+merge_env() {
+	local defaults=$1 target=$2 tmp line
+	tmp=$(mktemp)
+	if [[ -f $target ]]; then
+		cp "$target" "$tmp"
+		while IFS= read -r line; do
+			[[ $line =~ ^([A-Z_][A-Z0-9_]*)= ]] || continue
+			grep -qE "^${BASH_REMATCH[1]}=" "$tmp" || echo "$line" >>"$tmp"
+		done <"$defaults"
+	else
+		cp "$defaults" "$tmp"
+	fi
+	install_file "$tmp" "$target" 0644
+	rm -f "$tmp"
+}
+
+# set_env TARGET KEY VALUE — force an installer-managed key (e.g. KIOSK_VNC from --vnc/--no-vnc).
+set_env() {
+	local target=$1 key=$2 value=$3 tmp
+	tmp=$(mktemp)
+	if [[ -f $target ]]; then grep -vE "^$key=" "$target" >"$tmp" || true; fi
+	echo "$key=$value" >>"$tmp"
+	if [[ -f $target ]] && [[ $(grep -E "^$key=" "$target") == "$key=$value" ]]; then
+		rm -f "$tmp"
+		return 0
+	fi
+	install_file "$tmp" "$target" 0644
+	rm -f "$tmp"
+}

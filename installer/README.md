@@ -21,6 +21,11 @@ Other flags: `--no-kiosk`, `--start-kiosk` (switch to the kiosk now instead of a
 | `initramfs/` | uConsole image apt fix (boots without initramfs; `mkinitramfs` can't resolve `/dev/root`) |
 | `config/netcaliper.toml` | default config (never overwritten) |
 
+**Power saving:** the screen dims after 9 min and the backlight turns off after 10 min without input;
+any key, trackball movement or VNC input wakes it (the waking key doesn't act). Tune
+`KIOSK_DIM_S` / `KIOSK_BLANK_S` (0 = never) and optional `KIOSK_BLANK_S_BATTERY` in
+`/etc/netcaliper/kiosk.env`, then `sudo systemctl restart netcaliper-kiosk`. Re-installs keep your values.
+
 **VNC:** connect to `<device>:5900` with a client that supports VeNCrypt or RSA-AES (TigerVNC viewer,
 Remmina). User `netcaliper`; the password is generated on the device:
 `sudo grep ^password /etc/netcaliper/wayvnc/config`. Change it there, then

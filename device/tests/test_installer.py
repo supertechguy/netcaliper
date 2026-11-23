@@ -82,3 +82,25 @@ def test_current_dm_is_safe_under_set_e(tmp_path: Path) -> None:
     (tmp_path / "display-manager.service").symlink_to(tmp_path / "lightdm.service")
     r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=False)
     assert r.stdout.strip() == "ok:lightdm"
+
+
+def test_merge_env_keeps_user_edits(tmp_path: Path) -> None:
+    lib = INSTALLER / "lib/common.sh"
+    defaults, target = tmp_path / "defaults", tmp_path / "kiosk.env"
+    defaults.write_text("# header\nKIOSK_BLANK_S=600\nKIOSK_DIM_S=540\n#KIOSK_BLANK_S_BATTERY=300\n")
+
+    def run(cmd: str) -> None:
+        # Stub out install/chmod/chown so the helpers run unprivileged on plain files.
+        stubs = 'install() { cp "$8" "$9"; }; chmod() { :; }; chown() { :; }'
+        script = f'set -euo pipefail; . "{lib}"; {stubs}; {cmd}'
+        r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=False)
+        assert r.returncode == 0, r.stderr
+
+    run(f'merge_env "{defaults}" "{target}"')
+    assert target.read_text() == defaults.read_text()  # fresh install: defaults verbatim
+    target.write_text("KIOSK_BLANK_S=120\n")  # user edit
+    run(f'merge_env "{defaults}" "{target}"')
+    assert target.read_text() == "KIOSK_BLANK_S=120\nKIOSK_DIM_S=540\n"  # kept + missing key added
+    run(f'set_env "{target}" KIOSK_VNC 1')
+    run(f'set_env "{target}" KIOSK_VNC 0')
+    assert target.read_text().count("KIOSK_VNC") == 1 and "KIOSK_VNC=0" in target.read_text()

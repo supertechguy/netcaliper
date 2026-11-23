@@ -82,3 +82,42 @@ def test_doctor_record(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> No
 def test_committed_schemas_current() -> None:
     schemas = Path(__file__).resolve().parents[2] / "schemas"
     assert export(schemas, check=True) == [], "run `netcaliper schemas`"
+
+
+def test_kiosk_blank_timeout_mirrors_session(tmp_path: Path) -> None:
+    from netcaliper.web.kiosk import blank_after_s, on_ac, read_env
+
+    env_file = tmp_path / "kiosk.env"
+    assert blank_after_s(read_env(env_file), ac=True) == 0  # no kiosk on this host
+    env_file.write_text("# c\nKIOSK_BLANK_S=600\n#KIOSK_BLANK_S_BATTERY=300\n")
+    env = read_env(env_file)
+    assert blank_after_s(env, ac=True) == 600 and blank_after_s(env, ac=False) == 600
+    env_file.write_text("KIOSK_BLANK_S=600\nKIOSK_BLANK_S_BATTERY=300  # shorter on battery\n")
+    env = read_env(env_file)
+    assert blank_after_s(env, ac=True) == 600 and blank_after_s(env, ac=False) == 300
+    assert blank_after_s({"KIOSK_BLANK_S": "0"}, ac=True) == 0
+
+    ps = tmp_path / "sys/class/power_supply"
+    assert on_ac(tmp_path / "sys")  # no supplies: desktop
+    (ps / "bat").mkdir(parents=True)
+    (ps / "bat/type").write_text("Battery\n")
+    (ps / "ac").mkdir()
+    (ps / "ac/type").write_text("Mains\n")
+    (ps / "ac/online").write_text("0\n")
+    assert not on_ac(tmp_path / "sys")
+    (ps / "ac/online").write_text("1\n")
+    assert on_ac(tmp_path / "sys")
+
+
+async def test_page_carries_blank_timeout(tmp_path: Path) -> None:
+    s = Settings(data_dir=tmp_path / "d", config_dir=tmp_path / "etc")
+    s.hardware.mode = "mock:uconsole-cm4-full"
+    (tmp_path / "etc").mkdir()
+    (tmp_path / "etc/kiosk.env").write_text("KIOSK_BLANK_S=600\n")
+    app = create_app(s)
+    async with app.router.lifespan_context(app):
+        transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 1234))
+        async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
+            html = (await c.get("/")).text
+    assert 'data-blank-after="600"' in html
+    assert "ncalAsleep" in html  # status polling pauses while the screen is dark

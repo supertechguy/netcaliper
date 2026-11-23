@@ -13,4 +13,7 @@ SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="1d50", ATTR{idPro
 SUBSYSTEM=="tty", ATTRS{product}=="netcaliper-probe", MODE="0660", GROUP="netcaliper", SYMLINK+="netcaliper-probe"
 SUBSYSTEM=="tty", ATTRS{product}=="netcaliper-poe", MODE="0660", GROUP="netcaliper", SYMLINK+="netcaliper-poe"
 
+# Backlight: the kiosk user (group video) dims/blanks the panel for power saving.
+SUBSYSTEM=="backlight", ACTION=="add|change", RUN+="/bin/chgrp video /sys%p/brightness /sys%p/bl_power", RUN+="/bin/chmod g+w /sys%p/brightness /sys%p/bl_power"
+
 LABEL="netcaliper_end"

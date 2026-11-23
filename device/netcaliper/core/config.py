@@ -60,6 +60,10 @@ class Settings(BaseModel):
         return self.data_dir / "artifacts"
 
     @property
+    def kiosk_env(self) -> Path:
+        return self.config_dir / "kiosk.env"
+
+    @property
     def helper_socket(self) -> Path:
         return self.run_dir / "helper.sock"
 

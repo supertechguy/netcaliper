@@ -15,6 +15,7 @@
 | 2026-11-23 | Remote view/control via opt-in VNC (`wayvnc` in the kiosk session, auth + TLS/RSA-AES, root netns only) |
 | 2026-11-23 | Remote *browser* access (login + TLS) moved from Phase 1 to Phase 4 (with enrollment); VNC covers remote use until then |
 | 2026-11-23 | Repo made public (end of Phase 1); history rewritten so all commits use the noreply email; arm64 CI moved to native runners |
+| 2026-11-23 | Screen blanking via backlight power (not output power-off): cage lacks output-power protocol, and disabling the output would drop VNC viewers |
 | 2026-11-23 | Hotplug by polling a USB/netdev signature (5 s) instead of udev/netlink — portable, no extra deps |
 
 ## Phases
@@ -110,7 +111,9 @@
 | Kiosk boot, rotation, uConsole tweaks | X | installer | uConsole | 1 | done |
 | Remote view + control (VNC) | E | installer (`--vnc`) | — | 1 | done |
 | Test plane: auto-placement of test interfaces in `ncal-test`, hotplug | X | `core.testplane`, helper, agent | — | 1 | done |
-| Boot splash, screen blanking control | X | installer / UI | uConsole | 2 | planned |
+| Power saving: dim 9 min → backlight off 10 min (configurable, optional shorter on battery), wake on any key/trackball/VNC input with the waking input swallowed, status polling paused while dark | X | installer (`kiosk-display`, swayidle), `web` | backlight | 1 | done |
+| Keep screen awake during long jobs (surveys, long tests) | X | UI wake lock / idle inhibit | — | 7 | planned |
+| Boot splash | X | installer | uConsole | 2 | planned |
 | Remote browser access (login + TLS on mgmt) | E | `web` | — | 4 | planned |
 | HTML + PDF per-run and per-site reports | E/C | `reports` | — | 9 | planned |
 | Cloud: enroll, sync, config pull, dashboard | E/C (Link-Live) | `cloud/` | — | 4 | planned |
