@@ -35,6 +35,15 @@ The box is plugged into untrusted networks.
 - Test-plane placement: core asks the helper to move test-role links/phys into `ncal-test` by MAC; the
   helper resolves MAC→ifname itself, refuses to move the only default-route interface, and every move
   is written to the hash-chained audit log.
+- Test execution: core hands only PASSIVE `test-ns` modules to the agent (`module.run`); the agent
+  re-validates the module, its config and that the interface exists in its namespace, and refuses
+  ACTIVE modules outright, so it can't be used to bypass the engagement guard in core.
+- 802.1X credentials are local only: a `0600` file in the data dir (`secrets.json`), deliberately
+  outside SQLite so nothing in it can reach the sync outbox. The password is never rendered back,
+  logged, or stored in results; wpa_supplicant gets it via a `0600` config in the agent's PrivateTmp
+  that is deleted after the attempt, and values that could break out of that config are rejected.
+- State-changing UI/API requests carrying a foreign `Origin` are refused (a page the kiosk browser
+  was sent to can't drive the device).
 
 ## Cloud
 - Device tokens: 32 random bytes, stored as SHA-256, revocable. Enrollment codes: one-time, 15 min.

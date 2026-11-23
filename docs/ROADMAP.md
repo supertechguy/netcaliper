@@ -19,6 +19,8 @@
 | 2026-11-23 | Hotplug by polling a USB/netdev signature (5 s) instead of udev/netlink — portable, no extra deps |
 | 2026-11-23 | Wired tests use own packet code (dpkt + AF_PACKET/raw sockets) and `ip`/`ethtool`/`wpa_supplicant` subprocesses — no pyroute2/dnspython/httpx dependencies; test-ns modules run in the agent via `module.run`, which refuses ACTIVE modules |
 | 2026-11-23 | Rogue-RA = more than one IPv6 *default* router; lifetime-0 prefix advertisers (Thread border routers) are informational |
+| 2026-11-23 | 802.1X credentials stored only on the device (0600 file outside SQLite, never synced); EAP-TLS deferred to Phase 3 alongside Wi-Fi EAP and a shared cert store |
+| 2026-11-23 | Added `python-multipart` (Apache-2.0) for UI form posts |
 
 ## Phases
 
@@ -26,7 +28,7 @@
 |---|---|---|---|
 | 0 | Foundation | scaffold, docs, config, SQLite + outbox, capability layer + mocks + fixtures, `netcaliper doctor` detects all current hardware, FastAPI UI shell with home tiles + keyboard nav, CI green | done |
 | 1 | Installer + kiosk | fresh Pi OS → boots into UI on uConsole; `--dev` on x86; `ncal-test` netns + agent + helper; nftables; idempotent re-run; uninstall | done (uConsole: boot-to-kiosk, reinstall, uninstall verified; x86 `--dev` verified in CI) |
-| 2 | Wired AutoTest | link, LLDP/CDP/EDP, DHCP (+rogue), DNS, gateway, IPv6, ping/TCP/HTTP/FTP, VLAN, 802.1X wired, profiles + thresholds, port blink, cable-test probe, results screen; netns integration tests | in progress (AutoTest end to end on the uConsole + netns tests; Wired screen, 802.1X credentials, boot splash pending) |
+| 2 | Wired AutoTest | link, LLDP/CDP/EDP, DHCP (+rogue), DNS, gateway, IPv6, ping/TCP/HTTP/FTP, VLAN, 802.1X wired, profiles + thresholds, port blink, cable-test probe, results screen; netns integration tests | done (AutoTest + Wired screen on the uConsole/AX88179 against a real LAN; netns tests in CI and on device; EAP-TLS deferred) |
 | 3 | Wi-Fi core | multi-radio scan, IE decoding, channel/interference analysis, connection test (PSK + EAP), roaming, client discovery (monitor), locate | planned |
 | 4 | Cloud sync v1 | Worker + D1 + migrations + Actions deploy, enroll, sync, config pull, Access JWT check, usage meter + back-off, retention cron, basic dashboard | planned |
 | 5 | Discovery | ARP/ICMP/mDNS/SSDP/NetBIOS/LLDP, SNMP v1/2c/3, OUI DB, classification, topology, problem detection | planned |
@@ -45,15 +47,15 @@
 | Link: speed/duplex, adv. vs negotiated, link-up time, flap counter | E | `wired.link` | wired NIC | 2 | done (AX88179 verified) |
 | LLDP / CDP / EDP incl. VLAN, voice VLAN, LLDP-MED PoE | E | `wired.switchinfo` | wired NIC | 2 | done (LLDP+CDP verified on a real switch; EDP in netns tests) |
 | 802.1Q VLAN tests, multiple VLAN profiles | E | `wired.vlan` | wired NIC | 2 | done (netns-tested) |
-| 802.1X wired (PEAP/TLS) | E | `wired.dot1x` | wired NIC | 2 | in progress (PEAP/TTLS/MD5 module; MD5 netns-tested vs hostapd; credential UI + EAP-TLS pending) |
+| 802.1X wired (PEAP/TLS) | E | `wired.dot1x` | wired NIC | 2 | done for PEAP/TTLS/MD5 (MD5 netns-tested vs hostapd, local-only credentials); EAP-TLS needs a cert store → Phase 3 with Wi-Fi EAP |
 | DHCP timing, lease details, multiple/rogue server detection | E/C | `wired.dhcp` | wired NIC | 2 | done |
 | IPv6: RA/SLAAC, DHCPv6, gateway | E | `wired.ipv6` | wired NIC | 2 | done (RA + DHCPv6 probe, rogue-RA by default-router count; observe only, no SLAAC config) |
 | DNS timing, multiple servers; gateway reachability | E | `net.dns`, `net.gateway` | any test iface | 2 | done |
-| Ping / TCP / HTTP(S) / FTP targets with thresholds | E | `net.targets` | any test iface | 2 | done (FTP not yet integration-tested) |
+| Ping / TCP / HTTP(S) / FTP targets with thresholds | E | `net.targets` | any test iface | 2 | done |
 | iperf3 client/server + netcaliper↔netcaliper reflector/peer | E | `perf.iperf`, `perf.reflector` | wired NIC (CM4: USB 2.0 caps it at ~300 Mb/s) | 9 | planned |
 | Path analysis: traceroute + SNMP along path | E | `perf.path` | — (SNMP needs engagement) | 9 | planned |
 | Packet capture with filters → pcap (local, downloadable) | E | `tools.capture` | any test iface | 9 | planned |
-| Port blink | E | `wired.blink` | wired NIC | 2 | in progress (module done; Wired-screen button pending) |
+| Port blink | E | `wired.blink` | wired NIC | 2 | done (Wired screen) |
 | Cable test via `ethtool --cable-test` when PHY supports | E | `wired.cable` | PHY w/ cable diag (AX88179: no) | 2 | done (skips cleanly when unsupported) |
 | Wiremap, remote IDs, length, tone | E | `probe.*` | netcaliper probe | 10 | stub |
 | PoE / TruePower class, voltage, power under load | E | `poe.truepower` | PoE module | 10 | stub |
@@ -115,7 +117,7 @@
 | Test plane: auto-placement of test interfaces in `ncal-test`, hotplug | X | `core.testplane`, helper, agent | — | 1 | done |
 | Power saving: dim 9 min → backlight off 10 min (configurable, optional shorter on battery), wake on any key/trackball/VNC input with the waking input swallowed, status polling paused while dark | X | installer (`kiosk-display`, swayidle), `web` | backlight | 1 | done |
 | Keep screen awake during long jobs (surveys, long tests) | X | UI wake lock / idle inhibit | — | 7 | planned |
-| Boot splash | X | installer | uConsole | 2 | planned |
+| Boot splash | X | installer | uConsole | 2 | done (Plymouth theme, verified on the uConsole boot) |
 | Remote browser access (login + TLS on mgmt) | E | `web` | — | 4 | planned |
 | HTML + PDF per-run and per-site reports | E/C | `reports` | — | 9 | planned |
 | Cloud: enroll, sync, config pull, dashboard | E/C (Link-Live) | `cloud/` | — | 4 | planned |

@@ -68,6 +68,31 @@ with RawSocket(ifname) as s:
         time.sleep(0.5)
 """
 
+FTP = r"""
+import asyncio
+
+async def handle(r, w):
+    w.write(b"220-netcaliper test FTP\r\n220 ready\r\n")  # multi-line banner
+    while line := await r.readline():
+        cmd = line.decode().split(" ", 1)[0].upper().strip()
+        if cmd == "USER":
+            w.write(b"331 password please\r\n")
+        elif cmd == "PASS":
+            w.write(b"230 logged in\r\n" if line.strip().endswith(b"letmein") else b"530 no\r\n")
+        elif cmd == "QUIT":
+            w.write(b"221 bye\r\n")
+            await w.drain()
+            break
+    w.close()
+
+async def main():
+    srv = await asyncio.start_server(handle, "192.0.2.1", 21)
+    async with srv:
+        await srv.serve_forever()
+
+asyncio.run(main())
+"""
+
 CLIENT = """
 import asyncio, json, sys
 from pathlib import Path
@@ -224,6 +249,7 @@ def lab(tmp_path: Path) -> Iterator[dict[str, Any]]:
                 log=tmp_path / "http.log",
             )
         )
+        procs.append(bg(s, sys.executable, "-c", FTP, log=tmp_path / "ftp.log"))
         procs.append(
             bg(s, sys.executable, "-c", EMITTER, "ports", "02:00:00:00:5b:02", log=tmp_path / "emit.log")
         )
@@ -261,6 +287,8 @@ def test_wired_autotest_against_real_servers(lab: dict[str, Any]) -> None:
                         {"kind": "ping", "target": "192.0.2.1"},
                         {"kind": "tcp", "target": "192.0.2.1", "port": 53},
                         {"kind": "http", "target": "http://example.test:8080/"},
+                        {"kind": "ftp", "target": "example.test", "user": "tester", "password": "letmein"},
+                        {"kind": "ftp", "target": "192.0.2.1", "user": "tester", "password": "wrong"},
                     ],
                     "count": 3,
                 },
@@ -301,7 +329,10 @@ def test_wired_autotest_against_real_servers(lab: dict[str, Any]) -> None:
     assert v6["metrics"]["dhcp6"] is True, msg
 
     tg = out["net.targets"]
-    assert tg["status"] == "pass" and tg["metrics"]["failed"] == 0, (msg, tg["details"])
+    rows = tg["details"]["targets"]
+    assert [r["ok"] for r in rows] == [True, True, True, True, False], (msg, rows)
+    assert rows[3]["detail"]["status"] == 230 and rows[4]["detail"]["status"] == 530
+    assert tg["status"] == "warn" and tg["metrics"]["failed"] == 1  # one bad login, rest fine
 
     vl = {v["vlan"]: v for v in out["wired.vlan"]["details"]["vlans"]}
     assert vl[30]["ok"] and vl[30]["ip"].startswith("198.51.100.") and not vl[99]["ok"], msg

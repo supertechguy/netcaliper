@@ -306,6 +306,28 @@ if [[ $KIOSK == 1 ]]; then
 		state_set DEFAULT_TARGET "$(systemctl get-default)"
 		systemctl set-default -q graphical.target
 	fi
+	if command -v plymouth-set-default-theme >/dev/null; then
+		# Boot splash: our Plymouth theme with a rendered wordmark image.
+		TD=/usr/share/plymouth/themes/netcaliper
+		install -d -m 0755 "$TD"
+		install_file "$SRC/installer/plymouth/netcaliper.plymouth" "$TD/netcaliper.plymouth" 0644
+		install_file "$SRC/installer/plymouth/netcaliper.script" "$TD/netcaliper.script" 0644
+		# Unrotated: Plymouth applies the DRM panel-orientation property itself (verified on the
+		# uConsole), unlike wlroots/cage, which is why only the kiosk needs KIOSK_TRANSFORM.
+		img=$(mktemp)
+		"$PREFIX/venv/bin/netcaliper" splash --out "$img"
+		install_file "$img" "$TD/splash.png" 0644
+		rm -f "$img"
+		cur=$(plymouth-set-default-theme 2>/dev/null || true)
+		if [[ $cur != netcaliper ]]; then
+			state_set PLYMOUTH_THEME "$cur"
+			plymouth-set-default-theme netcaliper
+			info "boot splash: netcaliper (was ${cur:-none}; uninstall.sh restores it)"
+			if ls /boot/initrd.img-* >/dev/null 2>&1; then
+				if update-initramfs -u >/dev/null 2>&1; then info "initramfs updated"; else warn "update-initramfs failed"; fi
+			fi
+		fi
+	fi
 	if [[ $START_KIOSK == 1 ]]; then
 		[[ -n $dm ]] && systemctl stop "$dm" || true
 		systemctl restart "$KIOSK_UNIT"

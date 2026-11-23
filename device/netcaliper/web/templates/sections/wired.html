@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Wired · netcaliper{% endblock %}
+{% block main %}
+<section class="page wired">
+  <h1>Wired <span class="dim small">
+    {% if iface %}{{ iface.name }}{% if iface.ifname %} · {{ iface.ifname }}{% endif %}{% else %}<span class="warn">no wired test interface</span>{% endif %}
+    {% if mock %} · simulated network{% endif %}</span></h1>
+  <div class="wired-grid">
+    <div class="tests">
+      {% for key, t in tests.items() %}
+      <button class="btn btn-test" hx-post="/wired/run/{{ key }}" hx-target="#run" {% if loop.first %}autofocus{% endif %}>
+        {{ t[0] }}<span class="hint">{{ t[1] }}</span>
+      </button>
+      {% endfor %}
+      <button class="btn btn-test" hx-post="/wired/dot1x" hx-target="#run">
+        802.1X<span class="hint">{% if dot1x.identity %}{{ dot1x.method | upper }} as {{ dot1x.identity }}{% else %}set credentials below{% endif %}</span>
+      </button>
+      <button class="btn btn-alt" hx-post="/autotest/cancel" hx-swap="none">Cancel</button>
+    </div>
+    <div class="forms">
+      <form class="inline" hx-post="/wired/vlan" hx-target="#run">
+        <label>VLANs <input name="vlans" inputmode="numeric" placeholder="10, 20, 30" size="14"></label>
+        <button class="btn">Test VLANs</button>
+      </form>
+      <form class="inline" hx-post="/wired/dot1x/credentials" hx-target="#run">
+        <label>802.1X <select name="method">{% for m in methods %}<option value="{{ m }}"{% if m == dot1x.method %} selected{% endif %}>{{ m | upper }}</option>{% endfor %}</select></label>
+        <input name="identity" placeholder="identity" value="{{ dot1x.identity }}" size="14" autocomplete="off">
+        <input name="password" type="password" placeholder="{% if dot1x.has_password %}(unchanged){% else %}password{% endif %}" size="12" autocomplete="off">
+        <button class="btn">Save</button>
+        {% if dot1x.identity %}<button class="btn btn-alt" hx-post="/wired/dot1x/clear" hx-target="#run">Forget</button>{% endif %}
+      </form>
+    </div>
+  </div>
+  <div id="run">{% if run %}{% include "partials/run.html" %}{% endif %}</div>
+</section>
+{% endblock %}
+{% block keyhints %}<kbd>←↑→↓</kbd> choose · <kbd>Enter</kbd> run · <kbd>Esc</kbd> leave field / back · <kbd>a</kbd> AutoTest{% endblock %}

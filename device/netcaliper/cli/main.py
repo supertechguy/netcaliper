@@ -145,6 +145,13 @@ def cmd_netns(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_splash(args: argparse.Namespace) -> int:
+    from .splash import write
+
+    write(Path(args.out), rotate=args.rotate, scale=args.scale)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     from .. import __version__
 
@@ -185,6 +192,12 @@ def main(argv: list[str] | None = None) -> int:
     ns.add_argument("action", choices=["up", "down"])
     ns.add_argument("--nft", help="nftables ruleset to load inside the namespace")
     ns.set_defaults(fn=cmd_netns)
+
+    sp = sub.add_parser("splash", help="render the boot splash PNG (installer)")
+    sp.add_argument("--out", required=True)
+    sp.add_argument("--rotate", type=int, choices=[0, 90, 180, 270], default=0)
+    sp.add_argument("--scale", type=int, default=8)
+    sp.set_defaults(fn=cmd_splash)
 
     args = ap.parse_args(argv)
     return int(args.fn(args))

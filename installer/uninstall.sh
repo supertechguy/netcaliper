@@ -43,6 +43,14 @@ if [[ -n ${dm:-} ]]; then
 fi
 target=$(state_get DEFAULT_TARGET || true)
 [[ -n ${target:-} ]] && systemctl set-default -q "$target"
+theme=$(state_get PLYMOUTH_THEME || true)
+if [[ -n ${theme:-} ]] && command -v plymouth-set-default-theme >/dev/null; then
+	plymouth-set-default-theme "$theme" && info "boot splash restored: $theme"
+fi
+if [[ -d /usr/share/plymouth/themes/netcaliper ]]; then
+	rm -rf /usr/share/plymouth/themes/netcaliper
+	info "removed /usr/share/plymouth/themes/netcaliper"
+fi
 
 step "Removing files"
 for u in "$KIOSK_UNIT" "${UNITS[@]}"; do remove_file "/etc/systemd/system/$u.service"; done

@@ -17,6 +17,7 @@ Other flags: `--no-kiosk`, `--start-kiosk` (switch to the kiosk now instead of a
 | `systemd/` | `netcaliper-{netns,helper,agent,core,kiosk}.service` (`@PREFIX@`/`@NETNS@` rendered at install) |
 | `nftables/ncal-test.nft` | ruleset loaded **inside** the test netns (default drop in/forward) |
 | `kiosk/session.sh` | runs inside cage: rotate portrait panels, optional wayvnc, wait for core, Chromium |
+| `plymouth/` | boot splash theme (the image is rendered at install by `netcaliper splash`; the previous theme is restored on uninstall) |
 | `pam/`, `tmpfiles/`, `udev/`, `modprobe/` | logind session for the kiosk, `/run/netcaliper`, USB device access, DVB blacklist |
 | `initramfs/` | uConsole image apt fix (boots without initramfs; `mkinitramfs` can't resolve `/dev/root`) |
 | `config/netcaliper.toml` | default config (never overwritten) |

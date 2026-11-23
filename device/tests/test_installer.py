@@ -104,3 +104,41 @@ def test_merge_env_keeps_user_edits(tmp_path: Path) -> None:
     run(f'set_env "{target}" KIOSK_VNC 1')
     run(f'set_env "{target}" KIOSK_VNC 0')
     assert target.read_text().count("KIOSK_VNC") == 1 and "KIOSK_VNC=0" in target.read_text()
+
+
+def test_boot_splash_png_is_valid_and_rotates() -> None:
+    import struct
+    import zlib
+
+    from netcaliper.cli.splash import png, render
+
+    w, h, rows = render(0)
+    data = png(w, h, rows)
+    assert data[:8] == b"\x89PNG\r\n\x1a\n"
+    ihdr_w, ihdr_h = struct.unpack("!II", data[16:24])
+    assert (ihdr_w, ihdr_h) == (w, h) and w > h  # landscape wordmark
+    idat = data[data.index(b"IDAT") + 4 : data.index(b"IEND") - 8]
+    raw = zlib.decompress(idat)
+    assert len(raw) == h * (1 + 4 * w)
+    w90, h90, rows90 = render(90)
+    assert (w90, h90) == (h, w)
+    # Clockwise: the first row of the rotated image is the original's first column, bottom to top.
+    col0 = bytes(b for r in reversed(rows) for b in r[:4])
+    assert rows90[0] == col0
+    assert png(w, h, rows) == data  # deterministic → installer re-runs stay no-ops
+
+
+def test_plymouth_theme_and_kiosk_handoff() -> None:
+    theme = (INSTALLER / "plymouth/netcaliper.plymouth").read_text()
+    assert "ModuleName=script" in theme and "netcaliper.script" in theme
+    script = (INSTALLER / "plymouth/netcaliper.script").read_text()
+    assert 'Image("splash.png")' in script and "SetDisplayPasswordFunction" in script
+    unit = (INSTALLER / "systemd/netcaliper-kiosk.service").read_text()
+    # Waiting for plymouth-quit-wait while conflicting with plymouth-quit would stall the kiosk.
+    assert "plymouth-quit-wait" not in unit
+    assert re.search(r"^Conflicts=.*plymouth-quit\.service", unit, re.M)
+    assert "plymouth quit --retain-splash" in unit
+    install = (INSTALLER / "install.sh").read_text()
+    for f in ("plymouth/netcaliper.plymouth", "plymouth/netcaliper.script"):
+        assert f"installer/{f}" in install and (INSTALLER / f).exists()
+    assert "PLYMOUTH_THEME" in (INSTALLER / "uninstall.sh").read_text()

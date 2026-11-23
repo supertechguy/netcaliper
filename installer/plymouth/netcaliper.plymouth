@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=netcaliper
+Description=netcaliper boot splash
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/netcaliper
+ScriptFile=/usr/share/plymouth/themes/netcaliper/netcaliper.script

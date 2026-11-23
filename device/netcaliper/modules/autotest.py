@@ -101,10 +101,11 @@ class AutoTest:
         test_netns: str | None = None,
         guard_factory: Callable[[], ScopeGuard] = lambda: ScopeGuard(None),
         clock_synced: Callable[[], bool] = lambda: False,
+        resolve: Callable[[ModuleStep], ModuleStep] = lambda s: s,  # e.g. inject local secrets
     ) -> None:
         self.runner, self.registry, self.repo = runner, registry, repo
         self.net, self.agent, self.test_netns = net, agent, test_netns
-        self.guard_factory, self.clock_synced = guard_factory, clock_synced
+        self.guard_factory, self.clock_synced, self.resolve = guard_factory, clock_synced, resolve
         self.current: RunState | None = None
         self.history: dict[str, RunState] = {}  # this boot's runs, newest last
         self._task: asyncio.Task[RunState] | None = None
@@ -217,7 +218,7 @@ class AutoTest:
 
     async def _step(self, ctx: RunContext, step: ModuleStep, st: StepState) -> None:
         st.status = "running"
-        tr = await self.runner.run_step(ctx, step)
+        tr = await self.runner.run_step(ctx, self.resolve(step))
         st.status, st.message, st.metrics, st.result_id = tr.status, tr.message, tr.metrics, tr.id
 
     async def _finish(self, run: TestRun, state: RunState) -> None:

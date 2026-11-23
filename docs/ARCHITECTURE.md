@@ -407,7 +407,11 @@ names resolved per release, e.g. `chromium` vs `chromium-browser`) → users (`n
 → `/opt/netcaliper` venv (system Python) → `/etc/netcaliper`, `/var/lib/netcaliper` → modprobe
 blacklist (`dvb_usb_rtl28xxu`, `rtl2832`, `rtl2832_sdr`) → udev rules (RTL-SDR, nRF24 `1915:0102`,
 probe/PoE VID:PIDs) → NM unmanaged config → nftables → systemd units → kiosk (tty1, cage, Chromium
-flags, crash restart, cursor hiding) → splash/branding → platform tweaks (uConsole rotation,
+flags, crash restart, cursor hiding) → boot splash (Plymouth `script` theme; the wordmark PNG is
+rendered by `netcaliper splash` with zlib only; Plymouth applies the panel-orientation property itself,
+cage needs `KIOSK_TRANSFORM`; the kiosk unit takes over like a display manager — `Conflicts=
+plymouth-quit`, `plymouth quit --retain-splash` then `plymouth --wait` before cage, or cage loses the
+DRM-master race; previous theme restored on uninstall) → platform tweaks (uConsole rotation,
 backlight, battery) → `netcaliper doctor`. `uninstall.sh` reverses it (keeps data unless `--purge`).
 
 ## 11. License

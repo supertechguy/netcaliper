@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
@@ -318,3 +319,57 @@ async def test_switchinfo_names_other_devices_heard(db: Database, registry: Hard
     s = by_module(run)["wired.switchinfo"]
     assert s.metrics["switch"] == "access-sw" and s.metrics["port"] == "Port 15"  # LLDP preferred
     assert "also heard: edge-router (cdp)" in s.message
+
+
+async def test_wired_screen_one_shot_tests(client: httpx.AsyncClient) -> None:
+    page = await client.get("/s/wired")
+    assert page.status_code == 200 and "/wired/run/blink" in page.text and "Test VLANs" in page.text
+    r = await client.post("/wired/run/blink")
+    assert "Port blink" in r.text
+    run = await client.app.state.autotest.wait()  # type: ignore[attr-defined]
+    assert run.profile_id == "wired.blink" and run.status == "pass"
+    assert "Port blink" in (await client.get("/s/wired")).text  # last wired run shown on return
+
+    bad = await client.post("/wired/vlan", data={"vlans": "10, 5000"})
+    assert "VLAN IDs" in bad.text and client.app.state.autotest.current.profile_id == "wired.blink"  # type: ignore[attr-defined]
+    await client.post("/wired/vlan", data={"vlans": "10 20,20"})
+    run = await client.app.state.autotest.wait()  # type: ignore[attr-defined]
+    assert run.profile_name == "VLANs 10, 20" and run.steps[-1].status == "pass"
+    assert (await client.post("/wired/run/nope")).status_code == 404
+
+
+async def test_dot1x_credentials_local_only(client: httpx.AsyncClient, settings: Settings) -> None:
+    assert "credentials first" in (await client.post("/wired/dot1x")).text
+    bad = await client.post(
+        "/wired/dot1x/credentials", data={"method": "peap", "identity": 'x"y', "password": "p"}
+    )
+    assert "no quotes" in bad.text
+    ok = await client.post(
+        "/wired/dot1x/credentials", data={"method": "peap", "identity": "alice", "password": "Tr0ub4dor"}
+    )
+    assert "Saved PEAP" in ok.text
+    f = settings.data_dir / "secrets.json"
+    assert f.stat().st_mode & 0o777 == 0o600
+    page = (await client.get("/s/wired")).text
+    assert "alice" in page and "Tr0ub4dor" not in page and "(unchanged)" in page
+    # Saving again without a password keeps the stored one.
+    await client.post("/wired/dot1x/credentials", data={"method": "ttls", "identity": "alice"})
+    assert json.loads(f.read_text())["dot1x"] == {
+        "method": "ttls",
+        "identity": "alice",
+        "password": "Tr0ub4dor",
+    }
+
+    await client.post("/wired/dot1x")
+    run = await client.app.state.autotest.wait()  # type: ignore[attr-defined]
+    assert run.steps[-1].status == "pass" and "TTLS as alice" in run.steps[-1].message
+    # The password is nowhere in what's stored or queued for sync.
+    db = client.app.state.db  # type: ignore[attr-defined]
+    for table in ("test_runs", "test_results", "outbox", "findings", "audit_log", "kv"):
+        cur = await db.conn.execute(f"SELECT * FROM {table}")
+        assert "Tr0ub4dor" not in repr(await cur.fetchall()), table
+    api = await client.get(f"/api/v1/runs/{run.run_id}")
+    assert "Tr0ub4dor" not in api.text
+
+    assert "removed" in (await client.post("/wired/dot1x/clear")).text
+    assert "dot1x" not in json.loads(f.read_text())

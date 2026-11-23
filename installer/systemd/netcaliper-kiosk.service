@@ -3,10 +3,13 @@
 # Recovery: Ctrl+Alt+F2 for a text console (cage -s allows VT switching).
 [Unit]
 Description=netcaliper kiosk (cage + Chromium on tty1)
-After=systemd-user-sessions.service plymouth-quit-wait.service getty@tty1.service
+After=systemd-user-sessions.service plymouth-start.service plymouth-quit.service getty@tty1.service
 After=dbus.socket systemd-logind.service netcaliper-core.service
 Wants=dbus.socket systemd-logind.service netcaliper-core.service
-Conflicts=getty@tty1.service
+# Like a display manager: take over from the boot splash ourselves (plymouth quit --retain-splash
+# below keeps the last splash frame until cage draws) instead of letting plymouth-quit blank it.
+Conflicts=getty@tty1.service plymouth-quit.service
+OnFailure=plymouth-quit.service
 ConditionPathExists=/dev/tty0
 
 [Service]
@@ -19,6 +22,9 @@ EnvironmentFile=-/etc/netcaliper/kiosk.env
 # logind only activates the session on the foreground VT; after a display manager is stopped
 # (or a user switched VTs) that isn't tty1. "+" = as root, "-" = failure is not fatal.
 ExecStartPre=+-/usr/bin/chvt 1
+ExecStartPre=+-/usr/bin/plymouth quit --retain-splash
+# quit returns before plymouthd has released DRM master; cage started in that window exits.
+ExecStartPre=+-/usr/bin/plymouth --wait
 ExecStart=/usr/bin/cage -s -- @PREFIX@/libexec/kiosk-session
 Restart=always
 RestartSec=2

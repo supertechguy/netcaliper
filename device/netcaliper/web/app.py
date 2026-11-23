@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -26,11 +26,12 @@ from ..core.ids import utcnow
 from ..core.outbox import Outbox
 from ..core.repo import Repository
 from ..core.rpc import RpcClient
+from ..core.secrets import SecretStore
 from ..core.testplane import TestPlane, watch_hotplug
 from ..drivers.registry import HardwareRegistry
-from ..modules.autotest import AutoTest, Busy, load_profiles
+from ..modules.autotest import AutoTest, Busy, Profile, load_profiles
 from ..modules.registry import all_modules
-from ..modules.runner import ModuleRunner
+from ..modules.runner import ModuleRunner, ModuleStep
 from ..net.base import TestNet
 from .kiosk import blank_after_s, on_ac, read_env
 from .sections import BY_SLUG, SECTIONS
@@ -47,6 +48,37 @@ def _is_loopback(host: str | None) -> bool:
         return ipaddress.ip_address(host).is_loopback
     except ValueError:
         return False
+
+
+# One-shot tests on the Wired screen: (title, hint, steps). Run through AutoTest like any profile.
+WIRED_TESTS: dict[str, tuple[str, str, list[ModuleStep]]] = {
+    "link": ("Link", "speed, duplex, link-up time", [ModuleStep(module="wired.link")]),
+    "switch": (
+        "Switch",
+        "LLDP/CDP/EDP, up to 65 s",
+        [ModuleStep(module="wired.link"), ModuleStep(module="wired.switchinfo", config={"listen_s": 65})],
+    ),
+    "dhcp": (
+        "DHCP",
+        "lease, timing, rogue servers",
+        [ModuleStep(module="wired.link"), ModuleStep(module="wired.dhcp")],
+    ),
+    "ipv6": (
+        "IPv6",
+        "routers, prefixes, DHCPv6",
+        [ModuleStep(module="wired.link"), ModuleStep(module="wired.ipv6")],
+    ),
+    "cable": ("Cable test", "PHY diagnostics, if supported", [ModuleStep(module="wired.cable")]),
+    "blink": ("Port blink", "toggle link 10 times to find the port", [ModuleStep(module="wired.blink")]),
+}
+DOT1X_METHODS = ("peap", "ttls", "md5")
+
+
+def _parse_vlans(text: str) -> list[int]:
+    vids = [int(t) for t in text.replace(",", " ").split() if t.isdigit()]
+    if not vids or len(vids) > 16 or any(not 1 <= v <= 4094 for v in vids):
+        raise ValueError("enter 1 to 16 VLAN IDs between 1 and 4094")
+    return list(dict.fromkeys(vids))
 
 
 def _same_origin(request: Request) -> bool:
@@ -90,6 +122,16 @@ def create_app(
         app.state.db = db
         app.state.outbox = Outbox(db)
         app.state.repo = repo = Repository(db)
+        secrets = app.state.secrets
+
+        def resolve_step(step: ModuleStep) -> ModuleStep:
+            """802.1X steps without a password get the locally stored credentials (never synced)."""
+            if step.module != "wired.dot1x" or step.config.get("password"):
+                return step
+            cred = secrets.get("dot1x") or {}
+            cfg = {**cred, **{k: v for k, v in step.config.items() if v not in (None, "")}}
+            return step.model_copy(update={"config": cfg})
+
         modules = all_modules()
         net = test_net
         if net is None and not real:
@@ -104,6 +146,7 @@ def create_app(
             agent=RpcClient(settings.agent_socket, timeout=300) if real else None,
             test_netns=settings.test_netns,
             clock_synced=clock_synced,
+            resolve=resolve_step,
         )
         if app.state.plane is None and real:
             app.state.plane = TestPlane(RpcClient(settings.helper_socket), settings.test_netns, AuditLog(db))
@@ -127,6 +170,7 @@ def create_app(
     app.state.settings = settings
     app.state.registry = registry
     app.state.plane = plane
+    app.state.secrets = SecretStore(settings.data_dir / "secrets.json")
 
     @app.middleware("http")
     async def local_only(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
@@ -167,6 +211,17 @@ def create_app(
         devs = registry.inventory.by_role("test-wired")
         return devs[0] if devs else None
 
+    def start_partial(request: Request, profile: Profile) -> HTMLResponse:
+        at: AutoTest = app.state.autotest
+        try:
+            run = at.start(profile)
+        except Busy:
+            run = at.current
+        return templates.TemplateResponse(request, "partials/run.html", ctx(request, run=run))
+
+    def notice(request: Request, text: str, cls: str = "warn") -> HTMLResponse:
+        return templates.TemplateResponse(request, "partials/notice.html", ctx(request, text=text, cls=cls))
+
     @app.get("/s/autotest", response_class=HTMLResponse)
     async def autotest_page(request: Request) -> HTMLResponse:
         at: AutoTest = app.state.autotest
@@ -187,12 +242,7 @@ def create_app(
         p = profiles().get(profile_id)
         if p is None:
             raise HTTPException(404, "unknown profile")
-        at: AutoTest = app.state.autotest
-        try:
-            run = at.start(p)
-        except Busy:
-            run = at.current
-        return templates.TemplateResponse(request, "partials/run.html", ctx(request, run=run))
+        return start_partial(request, p)
 
     @app.post("/autotest/cancel")
     async def autotest_cancel() -> dict[str, Any]:
@@ -205,6 +255,82 @@ def create_app(
         if run is None:
             raise HTTPException(404)
         return templates.TemplateResponse(request, "partials/run.html", ctx(request, run=run))
+
+    @app.get("/s/wired", response_class=HTMLResponse)
+    async def wired_page(request: Request) -> HTMLResponse:
+        at: AutoTest = app.state.autotest
+        run = at.current if at.current and at.current.profile_id.startswith("wired.") else None
+        cred = app.state.secrets.get("dot1x") or {}
+        return templates.TemplateResponse(
+            request,
+            "sections/wired.html",
+            ctx(
+                request,
+                section=BY_SLUG["wired"],
+                tests=WIRED_TESTS,
+                run=run,
+                iface=wired_iface(),
+                dot1x={
+                    "method": cred.get("method", "peap"),
+                    "identity": cred.get("identity", ""),
+                    "has_password": bool(cred.get("password")),
+                },
+                methods=DOT1X_METHODS,
+            ),
+        )
+
+    @app.post("/wired/run/{key}", response_class=HTMLResponse)
+    async def wired_run(request: Request, key: str) -> HTMLResponse:
+        if key not in WIRED_TESTS:
+            raise HTTPException(404)
+        title, _, steps = WIRED_TESTS[key]
+        return start_partial(
+            request, Profile(id=f"wired.{key}", name=title, steps=[s.model_copy(deep=True) for s in steps])
+        )
+
+    @app.post("/wired/vlan", response_class=HTMLResponse)
+    async def wired_vlan(request: Request, vlans: str = Form("")) -> HTMLResponse:
+        try:
+            vids = _parse_vlans(vlans)
+        except ValueError as e:
+            return notice(request, str(e))
+        steps = [ModuleStep(module="wired.link"), ModuleStep(module="wired.vlan", config={"vlans": vids})]
+        return start_partial(
+            request, Profile(id="wired.vlan", name=f"VLANs {', '.join(map(str, vids))}", steps=steps)
+        )
+
+    @app.post("/wired/dot1x", response_class=HTMLResponse)
+    async def wired_dot1x(request: Request) -> HTMLResponse:
+        if not (app.state.secrets.get("dot1x") or {}).get("identity"):
+            return notice(request, "Save 802.1X credentials first.")
+        steps = [ModuleStep(module="wired.link"), ModuleStep(module="wired.dot1x")]
+        return start_partial(request, Profile(id="wired.dot1x", name="802.1X", steps=steps))
+
+    @app.post("/wired/dot1x/credentials", response_class=HTMLResponse)
+    async def wired_dot1x_save(
+        request: Request,
+        method: str = Form("peap"),
+        identity: str = Form(""),
+        password: str = Form(""),
+    ) -> HTMLResponse:
+        if method not in DOT1X_METHODS:
+            return notice(request, "unsupported EAP method")
+        identity = identity.strip()
+        bad = any(c in v for v in (identity, password) for c in '"\\\n\r')
+        if not identity or len(identity) > 128 or len(password) > 256 or bad:
+            return notice(request, "Identity required; no quotes, backslashes or line breaks.")
+        old = app.state.secrets.get("dot1x") or {}
+        app.state.secrets.put(
+            "dot1x", {"method": method, "identity": identity, "password": password or old.get("password", "")}
+        )
+        return notice(
+            request, f"Saved {method.upper()} credentials for {identity} (stored on this device only).", "ok"
+        )
+
+    @app.post("/wired/dot1x/clear", response_class=HTMLResponse)
+    async def wired_dot1x_clear(request: Request) -> HTMLResponse:
+        app.state.secrets.delete("dot1x")
+        return notice(request, "802.1X credentials removed.", "ok")
 
     @app.get("/s/results", response_class=HTMLResponse)
     async def results_page(request: Request) -> HTMLResponse:
