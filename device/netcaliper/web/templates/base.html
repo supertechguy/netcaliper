@@ -12,7 +12,7 @@
 <body class="{% block bodyclass %}{% endblock %}" data-blank-after="{{ blank_after }}">
   <header class="statusbar" hx-get="/partials/status"
           hx-trigger="load, every 10s [!(window.ncalAsleep && ncalAsleep())]" hx-swap="innerHTML">
-    <span class="brand">netcaliper</span>
+    <span class="brand">{{ wordmark() }}</span>
   </header>
   <main id="main">{% block main %}{% endblock %}</main>
   <footer class="keyhints">{% block keyhints %}<kbd>Esc</kbd> back · <kbd>?</kbd> help{% endblock %}</footer>

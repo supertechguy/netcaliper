@@ -85,3 +85,35 @@ input, select { font: inherit; color: var(--fg); background: var(--bg-2); border
   border-radius: var(--radius); padding: .25em .4em; min-height: 44px; }
 input::placeholder { color: var(--fg-faint); }
 .notice-warn { color: var(--warn); } .notice-ok { color: var(--ok); }
+
+/* Wi-Fi screen */
+.forms-box { font-size: .9em; }
+.forms-box summary { list-style: none; display: inline-flex; min-height: 48px; align-items: center; }
+form.wrap { flex-wrap: wrap; margin-top: 8px; }
+table.bss td, table.chans td, table.clients td { padding: 4px 6px; white-space: nowrap; }
+table.bss tr:focus, table.chans tr:focus, table.clients tr:focus { outline: 2px solid var(--fg); }
+table.bss tr.assoc td:first-child::before { content: "● "; color: var(--ok); }
+.mono { font-family: var(--mono, monospace); }
+.wifi-view h2 { margin-top: .8em; }
+
+/* Locate */
+.geiger { margin: 24px 0; }
+.geiger .reading { font-size: 5em; line-height: 1; }
+.geiger .unit { font-size: .3em; margin-left: .3em; color: var(--fg-dim); }
+.geiger .meter { position: relative; height: 36px; background: var(--bg-2); border: 1px solid var(--fg-dim);
+  border-radius: var(--radius); margin: 16px 0 8px; }
+.geiger #bar { height: 100%; width: 0; background: var(--fg); transition: width .25s; }
+.geiger #peak { position: absolute; top: -4px; bottom: -4px; width: 3px; background: var(--warn); left: 0; }
+
+/* Pixel icons (same scanline look as the splash wordmark) */
+.ico { width: 1.1em; height: 1.1em; vertical-align: -.18em; flex: none; }
+.btn .ico { filter: none; }
+.btn-alt .ico, .h-ico, .tile-ico { filter: drop-shadow(0 0 3px var(--fg-dim)); }
+.h-ico { width: 1em; height: 1em; }
+.tile-ico { width: 56px; height: 56px; margin-bottom: auto; color: var(--fg); }
+.tile.not-ready .tile-ico { color: var(--fg-dim); }
+.btn-test .lbl { display: inline-flex; gap: .4em; align-items: center; }
+.statusbar .wordmark { height: 20px; width: auto; vertical-align: middle; color: var(--fg);
+  filter: drop-shadow(0 0 4px var(--fg-dim)); }
+summary .ico { margin-right: .4em; }
+.page p.sub { margin: -.4em 0 .6em; }

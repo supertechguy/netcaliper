@@ -42,6 +42,18 @@ The box is plugged into untrusted networks.
   outside SQLite so nothing in it can reach the sync outbox. The password is never rendered back,
   logged, or stored in results; wpa_supplicant gets it via a `0600` config in the agent's PrivateTmp
   that is deleted after the attempt, and values that could break out of that config are rejected.
+- Wi-Fi: the saved network (passphrase / EAP credentials) lives in the same local `secrets.json`;
+  certificates and keys for EAP-TLS (Wi-Fi and wired) in `data_dir/certs/` (0700 dir, 0600 files,
+  fixed names, content checked to be PEM/DER) — neither is in SQLite, so neither can reach the sync
+  outbox. Credentials are injected into the step config by core only for the saved SSID, travel to
+  the agent over the local socket, go into a 0600 wpa_supplicant config in the agent's PrivateTmp,
+  and are deleted when the test ends; results never contain them (tested).
+- Wi-Fi tests are client-level and passive in the CyberScope sense: scanning, associating with a
+  network we were given credentials for, roaming between *its* APs, and listening in monitor mode.
+  Nothing transmits deauth/disassoc, injects frames, or guesses credentials. Monitor capture parses
+  802.11 headers and the IEs that APs broadcast (plus the SSID in probe requests); data payloads are
+  never read or kept. Results include client MAC addresses, AP associations and probed SSIDs (the
+  report's purpose: who is on which AP, and locating them); like all results they sync as metadata.
 - State-changing UI/API requests carrying a foreign `Origin` are refused (a page the kiosk browser
   was sent to can't drive the device).
 

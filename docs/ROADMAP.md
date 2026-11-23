@@ -21,6 +21,10 @@
 | 2026-11-23 | Rogue-RA = more than one IPv6 *default* router; lifetime-0 prefix advertisers (Thread border routers) are informational |
 | 2026-11-23 | 802.1X credentials stored only on the device (0600 file outside SQLite, never synced); EAP-TLS deferred to Phase 3 alongside Wi-Fi EAP and a shared cert store |
 | 2026-11-23 | Added `python-multipart` (Apache-2.0) for UI form posts |
+| 2026-11-23 | Wi-Fi via own nl80211 genetlink client + own IE decoder (no pyroute2/iw parsing); `iw` only for mode/channel changes; wpa_supplicant with event-driven timings |
+| 2026-11-23 | Client MAC addresses, AP associations and probed SSIDs are kept in Wi-Fi results (and sync as metadata); frame payloads are never read |
+| 2026-11-23 | One saved Wi-Fi network + EAP-TLS cert store, both local-only (shared with wired 802.1X) |
+| 2026-11-23 | UI icons: pixel-grid inline SVG in the boot-splash style (no image assets) |
 
 ## Phases
 
@@ -29,7 +33,7 @@
 | 0 | Foundation | scaffold, docs, config, SQLite + outbox, capability layer + mocks + fixtures, `netcaliper doctor` detects all current hardware, FastAPI UI shell with home tiles + keyboard nav, CI green | done |
 | 1 | Installer + kiosk | fresh Pi OS → boots into UI on uConsole; `--dev` on x86; `ncal-test` netns + agent + helper; nftables; idempotent re-run; uninstall | done (uConsole: boot-to-kiosk, reinstall, uninstall verified; x86 `--dev` verified in CI) |
 | 2 | Wired AutoTest | link, LLDP/CDP/EDP, DHCP (+rogue), DNS, gateway, IPv6, ping/TCP/HTTP/FTP, VLAN, 802.1X wired, profiles + thresholds, port blink, cable-test probe, results screen; netns integration tests | done (AutoTest + Wired screen on the uConsole/AX88179 against a real LAN; netns tests in CI and on device; EAP-TLS deferred) |
-| 3 | Wi-Fi core | multi-radio scan, IE decoding, channel/interference analysis, connection test (PSK + EAP), roaming, client discovery (monitor), locate | planned |
+| 3 | Wi-Fi core | multi-radio scan, IE decoding, channel/interference analysis, connection test (PSK + EAP), roaming, client discovery (monitor), locate | done (uConsole: scan on both radios, PSK/SAE connect + DHCP vs a lab AP, monitor + locate on the MT7610U; hwsim netns test incl. roaming; EAP verified by config tests only) |
 | 4 | Cloud sync v1 | Worker + D1 + migrations + Actions deploy, enroll, sync, config pull, Access JWT check, usage meter + back-off, retention cron, basic dashboard | planned |
 | 5 | Discovery | ARP/ICMP/mDNS/SSDP/NetBIOS/LLDP, SNMP v1/2c/3, OUI DB, classification, topology, problem detection | planned |
 | 6 | Security | engagements + audit UI, scope guard, nmap + NSE + CVE enrichment, policy engine, rogue detection, wireless posture, segmentation, inventory export | planned |
@@ -47,7 +51,7 @@
 | Link: speed/duplex, adv. vs negotiated, link-up time, flap counter | E | `wired.link` | wired NIC | 2 | done (AX88179 verified) |
 | LLDP / CDP / EDP incl. VLAN, voice VLAN, LLDP-MED PoE | E | `wired.switchinfo` | wired NIC | 2 | done (LLDP+CDP verified on a real switch; EDP in netns tests) |
 | 802.1Q VLAN tests, multiple VLAN profiles | E | `wired.vlan` | wired NIC | 2 | done (netns-tested) |
-| 802.1X wired (PEAP/TLS) | E | `wired.dot1x` | wired NIC | 2 | done for PEAP/TTLS/MD5 (MD5 netns-tested vs hostapd, local-only credentials); EAP-TLS needs a cert store → Phase 3 with Wi-Fi EAP |
+| 802.1X wired (PEAP/TLS) | E | `wired.dot1x` | wired NIC | 2 / 3 | done: PEAP/TTLS/MD5 (MD5 netns-tested vs hostapd), EAP-TLS with the local cert store (Phase 3) |
 | DHCP timing, lease details, multiple/rogue server detection | E/C | `wired.dhcp` | wired NIC | 2 | done |
 | IPv6: RA/SLAAC, DHCPv6, gateway | E | `wired.ipv6` | wired NIC | 2 | done (RA + DHCPv6 probe, rogue-RA by default-router count; observe only, no SLAAC config) |
 | DNS timing, multiple servers; gateway reachability | E | `net.dns`, `net.gateway` | any test iface | 2 | done |
@@ -73,12 +77,12 @@
 ### Wi-Fi
 | Feature | Src | Module | Hardware | Phase | Status |
 |---|---|---|---|---|---|
-| Scan: SSID/BSSID, chan/width, RSSI, noise, security, PMF, WPS, standards, QBSS, hidden | E | `wifi.scan` | any radio (5 GHz: MT7610U/CYW43455) | 3 | planned |
-| Channel maps, co-/adjacent-channel analysis | E | `wifi.channels` | any radio | 3 | planned |
-| Connection test: assoc/auth/DHCP timing, PSK + EAP | E | `wifi.connect` | test-wifi radio | 3 | planned |
-| Roaming test between BSSIDs | E | `wifi.roam` | test-wifi radio | 3 | planned |
-| Client discovery, AP↔client association | E | `wifi.clients` | monitor radio (MT7610U) | 3 | planned |
-| Locate (Geiger counter + tone): AP / client / BLE | E | `wifi.locate`, `ble.locate` | radio / BLE | 3 / 8 | planned |
+| Scan: SSID/BSSID, chan/width, RSSI, noise, security, PMF, WPS, standards, QBSS, hidden | E | `wifi.scan` | any radio (5 GHz: MT7610U/CYW43455) | 3 | done (own nl80211 + IE decoder; multi-radio merge; tested on RTL8188CUS + MT7610U) |
+| Channel maps, co-/adjacent-channel analysis | E | `wifi.channels` | any radio | 3 | done (co/adjacent/overlap, 1/6/11 + 80 MHz recommendation, survey busy time where the driver reports it) |
+| Connection test: assoc/auth/DHCP timing, PSK + EAP | E | `wifi.connect` | test-wifi radio | 3 | done (PSK/SAE/OWE/open/EAP-PEAP/TTLS/TLS; PSK + SAE verified on hardware; then `wifi.dhcp`/`net.*`) |
+| Roaming test between BSSIDs | E | `wifi.roam` | test-wifi radio | 3 | done (hwsim-verified; needs ≥ 2 APs of one SSID) |
+| Client discovery, AP↔client association | E | `wifi.clients` | monitor radio (MT7610U) | 3 | done (headers only; deauth-flood finding) |
+| Locate (Geiger counter + tone): AP / client / BLE | E | `wifi.locate`, `ble.locate` | radio / BLE | 3 / 8 | Wi-Fi done (AP + client, meter + Web Audio clicks); BLE Phase 8 |
 | 6 GHz / 802.11ax scanning | E | `wifi.scan` | MT7921AU | 3 | stub (auto-detect) |
 | AirMapper: floor plan, walk-and-click, heatmaps (RSSI/SNR/co-chan/per-AP/rate) | E | `survey.*` | any radio | 7 | planned |
 | AirMapper active mode | E | `survey.active` | test-wifi radio | 7 | planned |

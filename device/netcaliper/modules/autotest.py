@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""AutoTest: run a profile end to end on the wired test interface.
+"""AutoTest: run a profile end to end on the profile's test interface (wired or Wi-Fi, by role).
 
 Steps run in order; `background` modules (passive listeners such as LLDP/CDP) start when reached and
 are collected at the end, so their listening window overlaps the rest of the run. One run at a time
@@ -24,8 +24,10 @@ from ..core.engagement import ScopeGuard
 from ..core.ids import new_id, utcnow
 from ..core.records import Status, TestRun
 from ..core.repo import Repository
+from ..drivers.base import Role
 from ..drivers.registry import HardwareRegistry
 from ..net.base import TestNet
+from ..net.wifi_base import TestWifi
 from .base import Caller, RunContext
 from .runner import ModuleRunner, ModuleStep
 from .runner import Profile as _Profile
@@ -39,6 +41,7 @@ StepStatus = Status | Literal["pending", "running"]
 class Profile(_Profile):
     description: str = ""
     source: str = "builtin"
+    interface: Literal["test-wired", "test-wifi"] = "test-wired"  # role of the interface under test
 
 
 def load_profiles(extra_dir: Path | None = None) -> dict[str, Profile]:
@@ -114,17 +117,27 @@ class AutoTest:
     def busy(self) -> bool:
         return self._task is not None and not self._task.done()
 
-    def _interface(self) -> tuple[str | None, str]:
+    def _interface(self, role: Role = "test-wired") -> tuple[str | None, str]:
         """(ifname inside the test netns, problem). Selected by role, never by name."""
-        devs = self.registry.inventory.by_role("test-wired")  # by role: "unused" ports stay unused
+        devs = self.registry.inventory.by_role(role)  # by role: "unused" ports stay unused
         if not devs:
-            return None, "no wired test interface"
+            return None, "no wired test interface" if role == "test-wired" else f"no {role} radio"
         d = devs[0]
         if d.ifname is None:
             return None, f"{d.name}: no network interface"
         if self.agent is not None and d.netns != self.test_netns:
             return None, f"{d.name} is not in the test namespace yet"
         return d.ifname, ""
+
+    def radios(self) -> dict[str, str]:
+        """Test-plane Wi-Fi radios by role (the mgmt radio is never offered to modules)."""
+        out: dict[str, str] = {}
+        roles: tuple[Role, ...] = ("test-wifi", "monitor")
+        for role in roles:
+            ifname, problem = self._interface(role)
+            if ifname and not problem:
+                out[role] = ifname
+        return out
 
     def start(self, profile: Profile) -> RunState:
         if self.busy:
@@ -170,7 +183,7 @@ class AutoTest:
         )
         if self.repo:
             await self.repo.save(run)
-        ifname, problem = self._interface()
+        ifname, problem = self._interface(profile.interface)
         state.interface = ifname
         ctx = RunContext(
             run_id=state.run_id,
@@ -179,16 +192,19 @@ class AutoTest:
             net=self.net,
             ifname=ifname,
             agent=self.agent,
+            radios=self.radios(),
         )
         background: list[tuple[StepState, asyncio.Task[Any]]] = []
         try:
+            no_link = ""  # set once the link/association failed
             for step, st in zip(profile.steps, state.steps, strict=True):
+                cls = self.runner.modules.get(step.module)
                 if (
-                    problem
-                    and self.runner.modules.get(step.module) is not None
-                    and self.runner.modules[step.module].executor == "test-ns"
+                    cls is not None
+                    and cls.executor == "test-ns"
+                    and (problem or (no_link and cls.needs_link))
                 ):
-                    st.status, st.message = "skipped", problem
+                    st.status, st.message = "skipped", problem or no_link
                     continue
                 if st.background:
                     st.status = "running"
@@ -199,6 +215,8 @@ class AutoTest:
                     break
                 if step.module == "wired.link" and st.status == "fail":
                     problem = "no link"  # nothing else on this interface can work
+                if step.module == "wifi.connect" and st.status in ("fail", "error", "skipped"):
+                    no_link = "not associated"  # scans / monitor still work
             for _, task in background:
                 await task
             for st in state.steps:
@@ -213,8 +231,21 @@ class AutoTest:
             state.message = "cancelled"
             raise
         finally:
+            if profile.interface == "test-wifi" and ifname and not problem:
+                await self._wifi_end(ifname)
             await self._finish(run, state)
         return state
+
+    async def _wifi_end(self, ifname: str) -> None:
+        """Leave the network after a Wi-Fi run (also on failure / cancel)."""
+        try:
+            if self.agent is not None:
+                await asyncio.shield(self.agent.call("wifi.end", {"ifname": ifname}, timeout=15))
+            elif isinstance(self.net, TestWifi):
+                await self.net.wifi_disconnect(ifname)
+                await self.net.release(ifname)
+        except Exception:
+            log.exception("leaving Wi-Fi on %s failed", ifname)
 
     async def _step(self, ctx: RunContext, step: ModuleStep, st: StepState) -> None:
         st.status = "running"

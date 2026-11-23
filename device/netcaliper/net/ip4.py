@@ -184,3 +184,47 @@ async def arp(ifname: str, src_mac: str, src_ip: str, target_ip: str, timeout_s:
         return ArpResult(ip=target_ip, mac=None, ms=None)
     t, frame = got[0]
     return ArpResult(ip=target_ip, mac=mac_str(dpkt.ethernet.Ethernet(frame).data.sha), ms=round(t - t0, 2))
+
+
+async def ping_stream(
+    ifname: str, target: str, duration_s: float, interval_s: float = 0.02, stop: asyncio.Event | None = None
+) -> tuple[int, int, float | None]:
+    """Echo every `interval_s` for `duration_s` (or until `stop`): (sent, received, longest gap ms).
+    The gap is the longest stretch between consecutive answered probes — the outage a roam caused."""
+    loop = asyncio.get_running_loop()
+    sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, ifname.encode())
+    sock.setblocking(False)
+    ident = (os.getpid() ^ random.getrandbits(16)) & 0xFFFF
+    sent_at: dict[int, float] = {}
+    answered: set[int] = set()
+
+    async def rx() -> None:
+        while True:
+            data = await loop.sock_recv(sock, 2048)
+            ihl = (data[0] & 0x0F) * 4
+            if len(data) < ihl + 8:
+                continue
+            typ, _, _, rid, rseq = struct.unpack("!BBHHH", data[ihl : ihl + 8])
+            if typ == 0 and rid == ident:
+                answered.add(rseq)
+
+    reader = asyncio.create_task(rx())
+    try:
+        seq = 0
+        end = time.monotonic() + duration_s
+        while time.monotonic() < end and not (stop and stop.is_set()):
+            seq = (seq + 1) & 0xFFFF
+            sent_at[seq] = now_ms()
+            with contextlib.suppress(OSError):  # e.g. ENETUNREACH mid-roam
+                await loop.sock_sendto(sock, echo_request(ident, seq, b"ncal-roam"), (target, 0))
+            await asyncio.sleep(interval_s)
+        await asyncio.sleep(0.3)  # late replies
+    finally:
+        reader.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await reader
+        sock.close()
+    ok = sorted(s for s in answered if s in sent_at)
+    gap = max((sent_at[b] - sent_at[a] for a, b in itertools.pairwise(ok)), default=None)
+    return len(sent_at), len(ok), round(gap, 1) if gap is not None else None

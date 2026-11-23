@@ -15,7 +15,7 @@ from pydantic import Field
 
 from ..core.records import Finding, Status
 from ..drivers.base import Capability as C
-from ..net.base import Lease
+from ..net.base import Lease, TlsFiles
 from .base import ModuleConfig, ModuleResult, RunContext, TestModule
 from .registry import register
 from .thresholds import worst
@@ -228,7 +228,7 @@ class DnsConfig(ModuleConfig):
 class NetDns(TestModule[DnsConfig]):
     id = "net.dns"
     title = "DNS"
-    requires = frozenset({C.WIRED_TEST})
+    requires = frozenset()  # any test interface with a lease (wired or Wi-Fi)
     executor = "test-ns"
     Config = DnsConfig
 
@@ -276,7 +276,7 @@ class GatewayConfig(ModuleConfig):
 class NetGateway(TestModule[GatewayConfig]):
     id = "net.gateway"
     title = "Gateway"
-    requires = frozenset({C.WIRED_TEST})
+    requires = frozenset()  # any test interface with a lease (wired or Wi-Fi)
     executor = "test-ns"
     Config = GatewayConfig
 
@@ -341,7 +341,7 @@ class TargetsConfig(ModuleConfig):
 class NetTargets(TestModule[TargetsConfig]):
     id = "net.targets"
     title = "Targets"
-    requires = frozenset({C.WIRED_TEST})
+    requires = frozenset()  # any test interface with a lease (wired or Wi-Fi)
     executor = "test-ns"
     Config = TargetsConfig
     timeout_s = 240.0
@@ -526,9 +526,14 @@ class WiredVlan(TestModule[VlanConfig]):
 
 
 class Dot1xConfig(ModuleConfig):
-    method: Literal["peap", "ttls", "md5"] = "peap"
+    method: Literal["peap", "ttls", "md5", "tls"] = "peap"
     identity: str = Field(min_length=1, max_length=128)
     password: str | None = Field(None, max_length=256, repr=False)  # resolved from secrets by core
+    # cert-store files, resolved to paths by core (EAP-TLS; ca_cert also validates PEAP/TTLS servers)
+    ca_cert: str | None = None
+    client_cert: str | None = None
+    private_key: str | None = None
+    private_key_password: str | None = Field(None, repr=False)
     timeout_s: float = Field(30.0, gt=0, le=120)
 
 
@@ -543,7 +548,13 @@ class WiredDot1x(TestModule[Dot1xConfig]):
 
     async def run(self, ctx: RunContext, cfg: Dot1xConfig) -> ModuleResult:
         net, ifname = self.net(ctx)
-        r = await net.dot1x(ifname, cfg.method, cfg.identity, cfg.password, cfg.timeout_s)
+        tls = TlsFiles(
+            ca_cert=cfg.ca_cert,
+            client_cert=cfg.client_cert,
+            private_key=cfg.private_key,
+            private_key_password=cfg.private_key_password,
+        )
+        r = await net.dot1x(ifname, cfg.method, cfg.identity, cfg.password, cfg.timeout_s, tls)
         metrics: dict[str, Any] = {"ok": r.ok, "auth_ms": r.auth_ms, "state": r.state}
         msg = (
             f"{cfg.method.upper()} as {cfg.identity}: authenticated in {r.auth_ms:.0f} ms"

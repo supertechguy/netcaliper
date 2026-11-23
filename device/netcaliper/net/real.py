@@ -17,12 +17,15 @@ from .base import (
     Neighbor,
     PingResult,
     RouterAdvert,
+    TlsFiles,
 )
 from .packets import iface_mac
+from .wifi import WifiReal
 
 
-class RealNet:
+class RealNet(WifiReal):
     def __init__(self) -> None:
+        super().__init__()
         self._addr: dict[str, str] = {}  # ifname -> IPv4 we configured (ARP source)
 
     async def link_status(self, ifname: str) -> LinkStatus:
@@ -89,9 +92,15 @@ class RealNet:
         await link.vlan_del(ifname)
 
     async def dot1x(
-        self, ifname: str, method: str, identity: str, password: str | None, timeout_s: float = 30.0
+        self,
+        ifname: str,
+        method: str,
+        identity: str,
+        password: str | None,
+        timeout_s: float = 30.0,
+        tls: TlsFiles | None = None,
     ) -> Dot1xResult:
-        return await dot1x.authenticate(ifname, method, identity, password, timeout_s)
+        return await dot1x.authenticate(ifname, method, identity, password, timeout_s, tls)
 
     async def cable_test(self, ifname: str) -> CableResult:
         return await link.cable_test(ifname)

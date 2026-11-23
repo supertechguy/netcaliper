@@ -1,0 +1,48 @@
+{# Tables for a finished Wi-Fi run: networks, channels, clients. Rows are focusable; Enter = Locate. #}
+<div class="wifi-view">
+{% if scan and scan.details.get("bss") %}
+  <h2>Networks <span class="dim small">{{ scan.details["bss"] | length }} BSSIDs · {{ scan.metrics.get("radios") }}</span></h2>
+  <table class="grid bss" data-list>
+    <tr><th>SSID</th><th>BSSID</th><th>Ch</th><th>Width</th><th>dBm</th><th>Security</th><th>PMF</th><th>Std</th><th>Load</th><th>Flags</th></tr>
+    {% for b in scan.details["bss"] %}
+    <tr tabindex="0" class="{% if b.associated %}assoc{% endif %}">
+      <td>{% if b.reported_by %}{{ b.ssid or "‹hidden›" }}{% else %}<a href="/s/wifi/locate?mac={{ b.bssid }}&freq={{ b.freq }}&label={{ (b.ssid or 'hidden') | urlencode }}" tabindex="-1">{{ b.ssid or "‹hidden›" }}</a>{% endif %}</td>
+      <td class="mono">{{ b.bssid }}</td><td>{{ b.channel }}</td>
+      <td>{{ b.width_mhz }}{% if b.center_channel and b.center_channel != b.channel %} <span class="dim">c{{ b.center_channel }}</span>{% endif %}</td>
+      {% if b.signal_dbm is none %}<td class="dim" title="reported by {{ b.reported_by }}, not heard directly">—</td>
+      {% else %}<td class="{% if b.signal_dbm >= -67 %}st-pass{% elif b.signal_dbm >= -75 %}st-warn{% else %}st-fail{% endif %}">{{ b.signal_dbm | int }}</td>{% endif %}
+      <td class="{% if b.security in ('Open', 'WEP') %}warn{% endif %}">{{ b.security }}</td>
+      <td>{{ b.pmf }}</td><td>{{ b.standards | join("/") }}</td>
+      <td>{% if b.stations is not none %}{{ b.stations }} sta · {{ b.utilization_pct }}%{% endif %}</td>
+      <td class="small">{% if b.wps %}WPS{% if not b.wps_locked %}!{% endif %} {% endif %}{% if b.k %}k{% endif %}{% if b.v %}v{% endif %}{% if b.r %}r{% endif %}{% if b.mld %} MLO{% endif %}{% if b.reported_by %} rep{% endif %}{% if b.radios | length > 1 %} ×{{ b.radios | length }}{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+{% endif %}
+{% if chans %}
+  <h2>Channels <span class="dim small">{{ chans.message }}</span></h2>
+  <table class="grid chans" data-list>
+    <tr><th>Band</th><th>Ch</th><th>Radios</th><th>BSSIDs</th><th>Strongest</th><th>Max load</th><th>SSIDs</th></tr>
+    {% for c in chans.details.get("channels", []) %}
+    <tr tabindex="0"><td>{{ c.band }}</td><td>{{ c.channel }}</td><td>{{ c.radios }}</td><td>{{ c.bss }}</td>
+      <td>{{ c.strongest | int if c.strongest is not none else "" }}</td><td>{{ c.utilization_pct if c.utilization_pct is not none else "" }}{% if c.utilization_pct is not none %}%{% endif %}</td>
+      <td class="small">{{ c.ssids | join(", ") | truncate(60) }}</td></tr>
+    {% endfor %}
+  </table>
+{% endif %}
+{% if clients and clients.details.get("clients") %}
+  <h2>Clients <span class="dim small">{{ clients.message }}</span></h2>
+  <table class="grid clients" data-list>
+    <tr><th>Client</th><th>AP</th><th>SSID</th><th>dBm</th><th>Frames</th><th>Probes</th></tr>
+    {% for c in clients.details["clients"] %}
+    <tr tabindex="0">
+      <td class="mono">{% if c.freq %}<a href="/s/wifi/locate?mac={{ c.mac }}&freq={{ c.freq }}&label={{ c.mac | urlencode }}" tabindex="-1">{{ c.mac }}</a>{% else %}{{ c.mac }}{% endif %}{% if c.randomized %} <span class="dim small">rand</span>{% endif %}</td>
+      <td class="mono">{{ c.bssid or "—" }}</td><td>{{ c.ssid or "" }}</td>
+      <td>{{ c.signal_dbm | int if c.signal_dbm is not none else "" }}</td><td>{{ c.frames }}</td>
+      <td class="small">{{ c.probes | join(", ") | truncate(40) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% if clients.details.get("deauth") %}<p class="small dim">Deauth/disassoc frames heard: {% for t, n in clients.details["deauth"].items() %}{{ t }} ×{{ n }}{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+{% endif %}
+</div>

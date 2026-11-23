@@ -197,6 +197,14 @@ runs profiles one at a time; `background` modules (the LLDP/CDP/EDP listener) st
 and are collected at the end so their listening window overlaps the rest. Profiles are YAML:
 built-in `netcaliper/profiles/`, local overrides in `/etc/netcaliper/profiles/` (same id wins).
 
+**Wi-Fi (Phase 3).** A profile names the role it tests (`interface: test-wired | test-wifi`); the run
+also carries `radios` (role → ifname for `test-wifi` and `monitor`, never `mgmt`), which the agent
+re-validates (must exist in its namespace and be a wiphy). `RealNet`/`MockNet` also implement
+`TestWifi` (`net/wifi_base.py`). After a failed association, link-dependent steps are skipped but scans
+and monitor capture still run (`needs_link = False`). Two more agent RPCs: `wifi.sample` (Locate) and
+`wifi.end` (leave the network + drop the address at the end of a Wi-Fi run). Built-in `wifi` profile:
+scan → channels → connect → DHCP → DNS → gateway → targets → roam → clients.
+
 ### Key implementation choices
 
 | Area | Choice | Why |
@@ -206,9 +214,12 @@ built-in `netcaliper/profiles/`, local overrides in `/etc/netcaliper/profiles/` 
 | Link | sysfs (`carrier`, `speed`, `duplex`, `carrier_changes`) + `ethtool --json` (link modes) | advertised vs. partner vs. negotiated (downshift warning), link-up timing when we bring it up, flap counter |
 | VLAN | 802.1Q subinterfaces (`<if[:9]>.<vid>`) in the netns, created and removed per test | each VLAN gets its own DHCP run |
 | IPv6 | raw ICMPv6 RS (hop limit 255) → every RA collected; DHCPv6 Solicit → Advertise when the RA's M/O flags ask for it | rogue-RA check counts only *default* routers (lifetime > 0): lifetime-0 prefix advertisers (Thread/Matter border routers) are normal — seen on a real LAN |
-| 802.1X | `wpa_supplicant -Dwired`, polled via `wpa_cli status` | PEAP/TTLS/MD5 now (EAP-TLS needs a cert store); config with credentials in a 0600 file in the agent's PrivateTmp, removed after the attempt; values that could break out of the config are rejected |
+| 802.1X | `wpa_supplicant -Dwired`, polled via `wpa_cli status` | PEAP/TTLS/MD5/EAP-TLS (client cert from the local cert store, optional CA check); config with credentials in a 0600 file in the agent's PrivateTmp, removed after the attempt; values that could break out of the config are rejected |
 | DNS / ping / ARP / TCP / HTTP / FTP | own DNS queries (dpkt) to the **DHCP-learned servers**, raw ICMP + ARP, asyncio streams for TCP/HTTP(S)/FTP | timing breakdown (DNS / connect / TLS / first byte); never the host resolver — in the test netns `/etc/resolv.conf` belongs to the management network |
-| Wi-Fi scan | nl80211 scan with raw IE parsing (own IE decoder; dpkt `ieee80211` for monitor frames) + `survey dump` for noise/busy time | full security/PMF/WPS/QBSS/HT/VHT/HE decoding; monitor-mode beacon capture adds client discovery |
+| Wi-Fi scan | **own nl80211 generic-netlink client** (`net/nl80211.py`: TRIGGER_SCAN + wait for the `scan` multicast, GET_SCAN dump with raw IEs, GET_SURVEY) + own IE decoder (`net/ie.py`) | `iw` prints a lossy human rendering; we need the raw IEs: SSID/hidden, RSN/WPA AKMs + ciphers, PMF, WPS (state, locked, device), country, QBSS load, 802.11k/v/r, HT/VHT/HE/EHT (b/g/a/n/ac/ax/be), streams, channel width + centre incl. 6 GHz HE operation. All radios with a test role scan in parallel and are merged per (BSSID, frequency) — Wi-Fi 7 APs reuse one BSSID across bands. Optional channel list (scan only where needed: roam/connect reuse the channels the SSID was heard on). Mode/channel changes via `iw` |
+| Channel analysis | pure function over the merged scan: virtual BSSIDs grouped into radios (same freq, MACs differing in the first octet or last nibble), neighbours below −82 dBm ignored; per BSS: *co-channel* (contends on the primary), *adjacent* (2.4 GHz partial overlap), *overlap* (5/6 GHz secondary-channel overlap) | recommends the quietest of 1/6/11 and the quietest 80 MHz 5 GHz block (DFS flagged); flags 2.4 GHz radios off 1/6/11 |
+| Wi-Fi connect / roam | `wpa_supplicant -Dnl80211` per test with an event-attached control socket (own client, `net/wpa.py`) | timings from the events themselves: scan → auth → assoc → EAP → 4-way → connected; reasons (WRONG_KEY, NETWORK_NOT_FOUND, ASSOC/AUTH_REJECT, EAP_FAILURE). PSK, SAE, PSK+SAE, OWE, open, EAP-PEAP/TTLS/TLS. SSID written hex-encoded; other values that could break out of the config are rejected. Roam = `ROAM <bssid>` to every other AP of the SSID (and back) while pinging the gateway every 20 ms: roam time + longest outage + lost probes. The network is left at the end of every Wi-Fi run (`wifi.end`) |
+| Monitor / locate | monitor mode on the `monitor` radio, AF_PACKET + own radiotap/802.11 header parser (`net/dot11.py`), channel hopping | client↔AP mapping from data-frame DS bits, probe requests, deauth/disassoc counting (flood finding). **Headers only**: data payloads are never read or kept. Locate samples one transmitter's dBm on one channel (`wifi.sample`, ~10 samples/s) |
 | nmap | subprocess `nmap --privileged -oX -` (works with ambient caps), XML parsed | stream progress via `--stats-every` |
 | Vuln lookup | **decoupled**: scan in netns → CPEs → enrichment in core (see §8) | `vulners` NSE needs internet from the *test* network |
 | SNMP | pysnmp (v1/v2c/v3, async) | |
@@ -244,7 +255,11 @@ built-in `netcaliper/profiles/`, local overrides in `/etc/netcaliper/profiles/` 
   `L`og/Results, `,` Settings); `Esc` back, `?` help overlay, focus ring always visible. Trackball =
   mouse. Minimum target 48 px, base font ~20 px.
 - Live data over WebSockets (`/ws/runs/{id}`, `/ws/stream/{topic}`) rendered by small Alpine components.
-- Locate "Geiger counter" tone is generated in-browser (Web Audio), so no audio stack in the backend.
+- Locate "Geiger counter" tone is generated in-browser (Web Audio), so no audio stack in the backend:
+  click rate and pitch rise with signal; meter + peak marker; the page polls `/api/v1/wifi/sample`.
+- Icons: 12×12 pixel grids in `web/icons.py`, rendered as inline SVG with the boot-splash scanline
+  look (each pixel row 78 % tall) in `currentColor`; the status-bar wordmark uses the splash font.
+  No image assets.
 - Status bar: battery, mgmt link, sync state (queued count / last sync / backoff), active engagement, clock-sync warning.
 - **Access:** server listens on 0.0.0.0:8080 *in the root netns* (test interfaces are physically
   unreachable from it — they're in `ncal-test`). Root-ns nftables allows 8080 only on `lo` and the
@@ -441,6 +456,11 @@ netcaliper/
   LLDP/CDP/EDP emitter built on our own frame builders; `hostapd -Dwired` for 802.1X accept/reject.
   The client side runs the agent's `module.run` inside its netns — the same path as on the device.
   Run in CI (GitHub runners have sudo) and on the uConsole.
+  Wi-Fi: `mac80211_hwsim` with 4 simulated radios — two `hostapd` APs (same SSID, channels 1 and 6,
+  one bridge + dnsmasq) and a client namespace running the agent handlers: scan, channel analysis,
+  wrong key, missing SSID, connect, DHCP, gateway, roam there-and-back, monitor capture. Skips when the
+  kernel lacks hwsim. The IE decoder is also pinned against beacons captured on the uConsole
+  (anonymised: SSIDs/BSSIDs replaced, vendor IEs, neighbour reports and MLD addresses removed).
 - Cloud: Vitest with `@cloudflare/vitest-pool-workers` + local D1; a budget test asserts a max-size
   sync request stays under 50 queries.
 - CI: device tests on x86 (Python 3.11 / 3.13 / 3.14) and native arm64 runners (3.11 / 3.13); an

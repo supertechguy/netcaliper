@@ -124,6 +124,7 @@ class ModuleRunner:
                     "module": cls.id,
                     "config": cfg.model_dump(mode="json"),
                     "ifname": ctx.ifname,
+                    "radios": ctx.radios,
                     "run_id": ctx.run_id,
                     "session": ctx.session,
                 },

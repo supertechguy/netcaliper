@@ -64,6 +64,7 @@ class RunContext:
     ifname: str | None = None  # the test interface *inside the test netns*, resolved by role
     session: dict[str, Any] = field(default_factory=dict)  # per-run shared state (e.g. the DHCP lease)
     agent: Caller | None = None  # set in core when test-ns modules must run in the agent
+    radios: dict[str, str] = field(default_factory=dict)  # role ("test-wifi", "monitor") -> ifname
 
 
 C = TypeVar("C", bound=ModuleConfig)
@@ -81,6 +82,7 @@ class TestModule(ABC, Generic[C]):
     # Background modules (passive listeners) start when reached and are collected at the end of a run.
     background: ClassVar[bool] = False
     timeout_s: ClassVar[float] = 120.0  # hard ceiling for one run of this module
+    needs_link: ClassVar[bool] = True  # False: still useful when the association failed (scan, monitor)
     Config: ClassVar[type[ModuleConfig]] = ModuleConfig
 
     def net(self, ctx: RunContext) -> tuple[TestNet, str]:

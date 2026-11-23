@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,9 @@ from ..core.rpc import Handler, Peer, RpcError, RpcServer
 from ..drivers.registry import HardwareRegistry
 from ..drivers.snapshot import collect_net, collect_real
 from ..net.base import TestNet
+from ..net.wifi_base import TestWifi
+
+_MAC = re.compile(r"^[0-9a-f]{2}(:[0-9a-f]{2}){5}$")
 
 
 def make_handlers(netns: str, sysfs: Path = Path("/sys"), net: TestNet | None = None) -> dict[str, Handler]:
@@ -44,6 +48,40 @@ def make_handlers(netns: str, sysfs: Path = Path("/sys"), net: TestNet | None = 
             "wiphys": [w.model_dump() for w in wiphys],
         }
 
+    def _iface(name: Any, wireless: bool = False) -> str:
+        """An interface that exists in this namespace (and is a Wi-Fi radio, if asked)."""
+        path = sysfs / "class/net" / name if isinstance(name, str) and name and "/" not in name else None
+        if path is None or not path.exists() or (wireless and not (path / "phy80211").exists()):
+            raise RpcError(
+                "bad_request", f"no such {'radio' if wireless else 'interface'} in {netns}: {name!r}"
+            )
+        return str(name)
+
+    async def wifi_sample(params: dict[str, Any], peer: Peer) -> Any:
+        """Locate: signal samples of one transmitter on one channel (monitor mode, headers only)."""
+        ifname = _iface(params.get("ifname"), wireless=True)
+        mac, freq = params.get("mac"), params.get("freq")
+        if not isinstance(mac, str) or not _MAC.match(mac.lower()):
+            raise RpcError("bad_request", "invalid mac")
+        if not isinstance(freq, int) or not 2400 <= freq <= 7125:
+            raise RpcError("bad_request", "invalid freq")
+        dur = float(params.get("duration_s") or 0.5)
+        samples = await wifi_net().wifi_sample(ifname, mac, freq, max(0.1, min(dur, 2.0)))
+        return [s.model_dump() for s in samples]
+
+    async def wifi_end(params: dict[str, Any], peer: Peer) -> Any:
+        """End of a Wi-Fi run: leave the network and drop the address."""
+        ifname = _iface(params.get("ifname"), wireless=True)
+        net = wifi_net()
+        await net.wifi_disconnect(ifname)
+        await test_net.release(ifname)
+        return {"ok": True}
+
+    def wifi_net() -> TestWifi:
+        if not isinstance(test_net, TestWifi):
+            raise RpcError("unavailable", "no Wi-Fi support in this test plane")
+        return test_net
+
     async def module_run(params: dict[str, Any], peer: Peer) -> Any:
         mid = params.get("module")
         cls = modules.get(mid) if isinstance(mid, str) else None
@@ -51,9 +89,11 @@ def make_handlers(netns: str, sysfs: Path = Path("/sys"), net: TestNet | None = 
             raise RpcError("bad_request", f"not a test-ns module: {mid!r}")
         if cls.activity is not Activity.PASSIVE:
             raise RpcError("forbidden", f"{cls.id} is ACTIVE; active modules are not run by the agent")
-        ifname = params.get("ifname")
-        if not isinstance(ifname, str) or "/" in ifname or not (sysfs / "class/net" / ifname).exists():
-            raise RpcError("bad_request", f"no such interface in {netns}: {ifname!r}")
+        ifname = _iface(params.get("ifname"))
+        raw_radios = params.get("radios") or {}
+        if not isinstance(raw_radios, dict) or len(raw_radios) > 4:
+            raise RpcError("bad_request", "invalid radios")
+        radios = {str(role): _iface(v, wireless=True) for role, v in raw_radios.items()}
         try:
             cfg = cls.Config.model_validate(params.get("config") or {})
         except ValidationError as e:
@@ -66,6 +106,7 @@ def make_handlers(netns: str, sysfs: Path = Path("/sys"), net: TestNet | None = 
             net=test_net,
             ifname=ifname,
             session=dict(session) if isinstance(session, dict) else {},
+            radios=radios,
         )
         try:
             result = await asyncio.wait_for(cls().run(ctx, cfg), cls.timeout_s)
@@ -75,7 +116,13 @@ def make_handlers(netns: str, sysfs: Path = Path("/sys"), net: TestNet | None = 
             result = ModuleResult(status="error", message=f"{type(e).__name__}: {e}")
         return {"result": result.model_dump(mode="json"), "session": ctx.session}
 
-    return {"ping": ping, "snapshot.net": snapshot_net, "module.run": module_run}
+    return {
+        "ping": ping,
+        "snapshot.net": snapshot_net,
+        "module.run": module_run,
+        "wifi.sample": wifi_sample,
+        "wifi.end": wifi_end,
+    }
 
 
 def build_server(netns: str, socket_path: Path) -> RpcServer:

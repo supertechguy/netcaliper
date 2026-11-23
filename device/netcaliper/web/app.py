@@ -19,6 +19,7 @@ from fastapi.templating import Jinja2Templates
 
 from .. import __version__
 from ..core.audit import AuditLog
+from ..core.certs import CertStore
 from ..core.clock import clock_synced
 from ..core.config import Settings
 from ..core.db import Database
@@ -33,11 +34,15 @@ from ..modules.autotest import AutoTest, Busy, Profile, load_profiles
 from ..modules.registry import all_modules
 from ..modules.runner import ModuleRunner, ModuleStep
 from ..net.base import TestNet
+from .icons import icon, wordmark
 from .kiosk import blank_after_s, on_ac, read_env
 from .sections import BY_SLUG, SECTIONS
+from .wifi import install as install_wifi
+from .wifi import resolve_wifi
 
 HERE = Path(__file__).parent
 templates = Jinja2Templates(directory=HERE / "templates")
+templates.env.globals.update(icon=icon, wordmark=wordmark)
 log = logging.getLogger(__name__)
 
 
@@ -71,7 +76,7 @@ WIRED_TESTS: dict[str, tuple[str, str, list[ModuleStep]]] = {
     "cable": ("Cable test", "PHY diagnostics, if supported", [ModuleStep(module="wired.cable")]),
     "blink": ("Port blink", "toggle link 10 times to find the port", [ModuleStep(module="wired.blink")]),
 }
-DOT1X_METHODS = ("peap", "ttls", "md5")
+DOT1X_METHODS = ("peap", "ttls", "md5", "tls")
 
 
 def _parse_vlans(text: str) -> list[int]:
@@ -125,12 +130,12 @@ def create_app(
         secrets = app.state.secrets
 
         def resolve_step(step: ModuleStep) -> ModuleStep:
-            """802.1X steps without a password get the locally stored credentials (never synced)."""
-            if step.module != "wired.dot1x" or step.config.get("password"):
-                return step
-            cred = secrets.get("dot1x") or {}
-            cfg = {**cred, **{k: v for k, v in step.config.items() if v not in (None, "")}}
-            return step.model_copy(update={"config": cfg})
+            """Steps get locally stored credentials / cert paths filled in (never synced)."""
+            if step.module == "wired.dot1x" and not step.config.get("password"):
+                cred = secrets.get("dot1x") or {}
+                cfg = {**cred, **{k: v for k, v in step.config.items() if v not in (None, "")}}
+                step = step.model_copy(update={"config": cfg})
+            return resolve_wifi(step, secrets, app.state.certs)
 
         modules = all_modules()
         net = test_net
@@ -171,6 +176,7 @@ def create_app(
     app.state.registry = registry
     app.state.plane = plane
     app.state.secrets = SecretStore(settings.data_dir / "secrets.json")
+    app.state.certs = CertStore(settings.data_dir / "certs")
 
     @app.middleware("http")
     async def local_only(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
@@ -211,6 +217,10 @@ def create_app(
         devs = registry.inventory.by_role("test-wired")
         return devs[0] if devs else None
 
+    def wifi_iface() -> Any:
+        devs = registry.inventory.by_role("test-wifi")
+        return devs[0] if devs else None
+
     def start_partial(request: Request, profile: Profile) -> HTMLResponse:
         at: AutoTest = app.state.autotest
         try:
@@ -234,6 +244,7 @@ def create_app(
                 profiles=list(profiles().values()),
                 run=at.current,
                 iface=wired_iface(),
+                wifi=wifi_iface(),
             ),
         )
 
@@ -274,8 +285,10 @@ def create_app(
                     "method": cred.get("method", "peap"),
                     "identity": cred.get("identity", ""),
                     "has_password": bool(cred.get("password")),
+                    "client_cert": cred.get("client_cert", ""),
                 },
                 methods=DOT1X_METHODS,
+                certs=app.state.certs.list(),
             ),
         )
 
@@ -312,17 +325,22 @@ def create_app(
         method: str = Form("peap"),
         identity: str = Form(""),
         password: str = Form(""),
+        client_cert: str = Form(""),
     ) -> HTMLResponse:
         if method not in DOT1X_METHODS:
             return notice(request, "unsupported EAP method")
+        listed = app.state.certs.list()
+        if method == "tls" and not {"cert", "key"} <= set(listed.get(client_cert, [])):
+            return notice(request, "EAP-TLS: pick a client certificate (import it on the Wi-Fi screen).")
         identity = identity.strip()
         bad = any(c in v for v in (identity, password) for c in '"\\\n\r')
         if not identity or len(identity) > 128 or len(password) > 256 or bad:
             return notice(request, "Identity required; no quotes, backslashes or line breaks.")
         old = app.state.secrets.get("dot1x") or {}
-        app.state.secrets.put(
-            "dot1x", {"method": method, "identity": identity, "password": password or old.get("password", "")}
-        )
+        cred = {"method": method, "identity": identity, "password": password or old.get("password", "")}
+        if method == "tls":
+            cred |= {"client_cert": client_cert, "private_key": client_cert}
+        app.state.secrets.put("dot1x", cred)
         return notice(
             request, f"Saved {method.upper()} credentials for {identity} (stored on this device only).", "ok"
         )
@@ -357,6 +375,15 @@ def create_app(
                 titles=titles,
             ),
         )
+
+    install_wifi(
+        app,
+        templates,
+        ctx,
+        start_partial,
+        notice,
+        RpcClient(settings.agent_socket, timeout=30) if real else None,
+    )
 
     # JSON API
     @app.get("/api/v1/profiles")

@@ -51,10 +51,13 @@ def test_builtin_and_local_profiles(tmp_path: Path) -> None:
     (tmp_path / "broken.yaml").write_text("id: [\n")
     (tmp_path / "bad.yaml").write_text("name: no id\nsteps: []\n")
     ps = load_profiles(tmp_path)
-    assert set(ps) == {"default"} and ps["default"].name == "Mine" and ps["default"].source == "local"
-    builtin = load_profiles()["default"]
+    assert set(ps) == {"default", "wifi"} and ps["default"].name == "Mine" and ps["default"].source == "local"
     mods = all_modules()
-    assert builtin.source == "builtin" and all(s.module in mods for s in builtin.steps)
+    for builtin in load_profiles().values():
+        assert builtin.source == "builtin" and all(s.module in mods for s in builtin.steps)
+        for s in builtin.steps:
+            mods[s.module].Config.model_validate(s.config)
+    assert load_profiles()["wifi"].interface == "test-wifi"
 
 
 async def test_default_profile_on_healthy_network(db: Database, registry: HardwareRegistry) -> None:

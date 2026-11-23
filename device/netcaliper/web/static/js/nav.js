@@ -24,8 +24,13 @@
   // Pure movement wakes the screen too (swayidle resumes on any input) but is never an action.
   window.addEventListener("pointermove", () => { lastInput = Date.now(); }, { capture: true, passive: true });
 
+  // Only what can actually take focus: content of a closed <details> still has layout boxes in
+  // Chromium (content-visibility), so it would win the spatial search and swallow the keypress.
+  const visible = (el) => (el.checkVisibility ? el.checkVisibility() : el.offsetParent !== null)
+    && el.tabIndex >= 0;
   const focusables = () => [...document.querySelectorAll(
-    "[data-grid] .tile, [data-list] [tabindex], main button, main a[href], main input, main select")];
+    "[data-grid] .tile, [data-list] [tabindex], main button, main a[href], main input, main select, main summary",
+  )].filter(visible);
   const typing = (el) => el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
 
   function move(dir) {

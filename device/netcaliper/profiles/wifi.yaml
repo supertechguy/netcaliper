@@ -1,0 +1,36 @@
+# Built-in Wi-Fi AutoTest. The network comes from the Wi-Fi screen (credentials are stored on this
+# device only) unless a step's config names one. Copy to /etc/netcaliper/profiles/ to customise.
+id: wifi
+name: Wi-Fi AutoTest
+description: Scan, channel analysis, connect (PSK/SAE/EAP), DHCP, DNS, gateway, roaming and clients.
+interface: test-wifi
+steps:
+  - module: wifi.scan
+  - module: wifi.channels
+    thresholds:
+      - {metric: max_cochannel, warn: "> 2", fail: "> 5"}
+  - module: wifi.connect
+    thresholds:
+      - {metric: connect_ms, warn: "> 1000", fail: "> 5000"}
+      - {metric: signal_dbm, warn: "< -67", fail: "< -75"}
+      - {metric: snr_db, warn: "< 25", fail: "< 15"}
+  - module: wifi.dhcp
+    thresholds:
+      - {metric: offer_ms, warn: "> 1000", fail: "> 5000"}
+      - {metric: ack_ms, warn: "> 1000", fail: "> 5000"}
+  - module: net.dns
+    config: {names: [example.com]}
+    thresholds:
+      - {metric: lookup_ms, warn: "> 150", fail: "> 1000"}
+  - module: net.gateway
+    thresholds:
+      - {metric: loss_pct, warn: "> 0", fail: "> 20"}
+      - {metric: rtt_avg_ms, warn: "> 20", fail: "> 100"}
+  - module: net.targets
+    thresholds:
+      - {metric: worst_ms, warn: "> 500", fail: "> 2000"}
+  - module: wifi.roam
+    thresholds:
+      - {metric: roam_worst_ms, warn: "> 150", fail: "> 500"}
+  - module: wifi.clients
+    config: {duration_s: 20}

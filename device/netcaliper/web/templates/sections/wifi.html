@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Wi-Fi · netcaliper{% endblock %}
+{% block main %}
+<section class="page wifi">
+  <h1>{{ icon("wifi", "ico h-ico") }} Wi-Fi</h1>
+  <p class="dim small sub">
+    test radio: {% if test_radio %}{{ test_radio.name }}{% if test_radio.ifname %} · {{ test_radio.ifname }}{% endif %}{% else %}<span class="warn">none</span>{% endif %}
+    · monitor: {% if monitor %}{{ monitor.name }}{% else %}none{% endif %}{% if mock %} · simulated{% endif %}</p>
+  <div class="wired-grid">
+    <div class="tests">
+      {% for key, t in tests.items() %}
+      <button class="btn btn-test" hx-post="/wifi/run/{{ key }}" hx-target="#run" {% if loop.first %}autofocus{% endif %}>
+        <span class="lbl">{{ icon(key) }} {{ t[0] }}</span><span class="hint">{% if key in ("connect", "roam") and net.ssid %}{{ net.ssid }} · {% endif %}{{ t[1] }}</span>
+      </button>
+      {% endfor %}
+      <button class="btn btn-test" hx-post="/wifi/run/full" hx-target="#run"><span class="lbl">{{ icon("autotest") }} AutoTest</span><span class="hint">Wi-Fi profile end to end</span></button>
+      <button class="btn btn-alt" hx-post="/autotest/cancel" hx-swap="none">{{ icon("cancel") }} Cancel</button>
+    </div>
+    <details class="forms-box">
+      <summary class="btn btn-alt">{{ icon("settings") }} Network{% if net.ssid %}: {{ net.ssid }}{% endif %} · certificates</summary>
+      <form class="inline wrap" hx-post="/wifi/network" hx-target="#run">
+        <input name="ssid" placeholder="SSID" value="{{ net.ssid }}" size="14" autocomplete="off" maxlength="32">
+        <select name="security" title="security">{% for s in security %}<option{% if s == net.security %} selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+        <input name="passphrase" type="password" size="12" autocomplete="off" placeholder="{% if net.has_passphrase %}(unchanged){% else %}passphrase{% endif %}">
+        <select name="eap_method" title="EAP method">{% for m in eap %}<option value="{{ m }}"{% if m == net.eap_method %} selected{% endif %}>{{ m | upper }}</option>{% endfor %}</select>
+        <input name="identity" placeholder="EAP identity" value="{{ net.identity }}" size="12" autocomplete="off">
+        <input name="password" type="password" size="10" autocomplete="off" placeholder="{% if net.has_password %}(unchanged){% else %}EAP password{% endif %}">
+        <select name="ca_cert" title="CA certificate (server validation)"><option value="">(no CA check)</option>{% for n, k in certs.items() if "ca" in k %}<option{% if n == net.ca_cert %} selected{% endif %}>{{ n }}</option>{% endfor %}</select>
+        <select name="client_cert" title="EAP-TLS client certificate"><option value="">(no client cert)</option>{% for n, k in certs.items() if "cert" in k and "key" in k %}<option{% if n == net.client_cert %} selected{% endif %}>{{ n }}</option>{% endfor %}</select>
+        <input name="private_key_password" type="password" size="8" autocomplete="off" placeholder="key pw">
+        <button class="btn">{{ icon("save") }} Save</button>
+        {% if net.ssid %}<button class="btn btn-alt" hx-post="/wifi/network/clear" hx-target="#run">{{ icon("forget") }} Forget</button>{% endif %}
+      </form>
+      <form class="inline wrap" hx-post="/certs" hx-target="#run" hx-encoding="multipart/form-data">
+        <input name="name" placeholder="cert name" size="10" autocomplete="off">
+        <select name="kind"><option value="ca">CA cert</option><option value="cert">client cert</option><option value="key">private key</option></select>
+        <input name="file" type="file" accept=".pem,.crt,.cer,.der,.key">
+        <button class="btn">{{ icon("import") }} Import</button>
+        {% for n, k in certs.items() %}<button class="btn btn-alt" hx-post="/certs/{{ n | urlencode }}/delete" hx-target="#run" hx-confirm="Delete {{ n }}?">{{ icon("forget") }} {{ n }} <span class="small">({{ k | join("+") }})</span></button>{% endfor %}
+      </form>
+    </details>
+  </div>
+  <div id="run">{% if run %}{% include "partials/run.html" %}{% elif last %}{% set run = last %}{% include "partials/run.html" %}{% endif %}</div>
+</section>
+{% endblock %}
+{% block keyhints %}<kbd>←↑→↓</kbd> choose · <kbd>Enter</kbd> run / locate · <kbd>Esc</kbd> back · <kbd>a</kbd> AutoTest{% endblock %}

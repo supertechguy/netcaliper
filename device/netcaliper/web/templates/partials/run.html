@@ -15,5 +15,7 @@
     </tr>
     {% endfor %}
   </table>
-  {% if run.done %}<p><a href="/results/{{ run.run_id }}">Details →</a></p>{% endif %}
+  {% if run.done %}<p><a href="/results/{{ run.run_id }}">{{ icon("details") }} Details →</a></p>
+  {% if run.profile_id.startswith("wifi") %}<div class="wifi-view" hx-get="/partials/wifi/view/{{ run.run_id }}" hx-trigger="load" hx-swap="outerHTML"></div>{% endif %}
+  {% endif %}
 </div>

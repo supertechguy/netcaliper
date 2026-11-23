@@ -143,6 +143,15 @@ class Dhcp6Result(BaseModel):
     error: str | None = None
 
 
+class TlsFiles(BaseModel):
+    """Cert-store files for EAP (paths resolved by core). ca_cert also validates PEAP/TTLS servers."""
+
+    ca_cert: str | None = None
+    client_cert: str | None = None
+    private_key: str | None = None
+    private_key_password: str | None = Field(None, repr=False)
+
+
 class Dot1xResult(BaseModel):
     ok: bool
     method: str
@@ -187,6 +196,12 @@ class TestNet(Protocol):
     async def vlan_add(self, ifname: str, vid: int) -> str: ...
     async def vlan_del(self, ifname: str) -> None: ...
     async def dot1x(
-        self, ifname: str, method: str, identity: str, password: str | None, timeout_s: float = 30.0
+        self,
+        ifname: str,
+        method: str,
+        identity: str,
+        password: str | None,
+        timeout_s: float = 30.0,
+        tls: TlsFiles | None = None,
     ) -> Dot1xResult: ...
     async def cable_test(self, ifname: str) -> CableResult: ...

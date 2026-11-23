@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Wired 802.1X via wpa_supplicant (-D wired) in the test netns: time to EAP success/failure.
 
-Password methods (PEAP/MSCHAPv2, TTLS/PAP, MD5) for now; EAP-TLS needs a certificate store (later).
+PEAP/MSCHAPv2, TTLS/PAP, MD5 and EAP-TLS (client certificate from the local cert store).
 The config holding credentials lives in a 0600 file in the agent's private tmp and is removed
 as soon as the attempt ends.
 """
@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 from ..drivers.snapshot import which
-from .base import Dot1xResult
+from .base import Dot1xResult, TlsFiles
 from .link import run
 from .packets import now_ms
 
@@ -25,16 +25,28 @@ METHODS = {
     "peap": 'eap=PEAP\n\tphase2="auth=MSCHAPV2"',
     "ttls": 'eap=TTLS\n\tphase2="auth=PAP"',
     "md5": "eap=MD5",
+    "tls": "eap=TLS",
 }
 _SAFE = re.compile(r'^[^"\\\n\r]*$')  # no quote/backslash/newline: can't break out of the config
 
 
-def config(method: str, identity: str, password: str | None) -> str:
+def config(method: str, identity: str, password: str | None, tls: TlsFiles | None = None) -> str:
     if method not in METHODS:
         raise ValueError(f"unsupported EAP method {method!r} (supported: {', '.join(METHODS)})")
-    for v in (identity, password or ""):
+    tls = tls or TlsFiles()
+    for v in (identity, password or "", *(x or "" for x in tls.model_dump().values())):
         if not _SAFE.match(v):
             raise ValueError("identity/password may not contain quotes, backslashes or newlines")
+    files = ""
+    if method == "tls":
+        if not (tls.client_cert and tls.private_key):
+            raise ValueError("EAP-TLS needs a client certificate and private key")
+        files += f'\tclient_cert="{tls.client_cert}"\n\tprivate_key="{tls.private_key}"\n'
+        if tls.private_key_password:
+            files += f'\tprivate_key_passwd="{tls.private_key_password}"\n'
+        password = None
+    if tls.ca_cert:
+        files += f'\tca_cert="{tls.ca_cert}"\n'
     return (
         "ap_scan=0\n"
         "network={\n"
@@ -42,18 +54,24 @@ def config(method: str, identity: str, password: str | None) -> str:
         f"\t{METHODS[method]}\n"
         f'\tidentity="{identity}"\n'
         + (f'\tpassword="{password}"\n' if password is not None else "")
+        + files
         + "\teapol_flags=0\n"
         "}\n"
     )
 
 
 async def authenticate(
-    ifname: str, method: str, identity: str, password: str | None, timeout_s: float = 30.0
+    ifname: str,
+    method: str,
+    identity: str,
+    password: str | None,
+    timeout_s: float = 30.0,
+    tls: TlsFiles | None = None,
 ) -> Dot1xResult:
     if not which("wpa_supplicant") or not which("wpa_cli"):
         return Dot1xResult(ok=False, method=method, state="unavailable", error="wpa_supplicant not installed")
     try:
-        conf_text = config(method, identity, password)
+        conf_text = config(method, identity, password, tls)
     except ValueError as e:
         return Dot1xResult(ok=False, method=method, state="config", error=str(e))
     with tempfile.TemporaryDirectory(prefix="ncal-8021x-") as d:

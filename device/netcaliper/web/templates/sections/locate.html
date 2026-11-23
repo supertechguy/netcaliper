@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Locate · netcaliper{% endblock %}
+{% block main %}
+<section class="page locate" data-mac="{{ mac }}" data-freq="{{ freq }}">
+  <h1>{{ icon("locate", "ico h-ico") }} Locate <span class="dim small">{{ label }} · {{ mac }} · {{ freq }} MHz · {% if radio %}{{ radio.name }}{% else %}<span class="warn">no test radio</span>{% endif %}</span></h1>
+  <div class="geiger">
+    <div class="reading"><span id="dbm">—</span><span class="unit">dBm</span></div>
+    <div class="meter" aria-hidden="true"><div id="bar"></div><div id="peak"></div></div>
+    <div class="small dim" id="info">waiting for frames… (walk slowly; the strongest reading is nearest)</div>
+  </div>
+  <div class="actions">
+    <button class="btn" id="sound" autofocus>{{ icon("sound") }} <span>Sound: on</span></button>
+    <button class="btn btn-alt" id="reset">{{ icon("reset") }} Reset peak</button>
+  </div>
+</section>
+<script src="/static/js/locate.js" defer></script>
+{% endblock %}
+{% block keyhints %}<kbd>Enter</kbd> toggle sound · <kbd>r</kbd> reset peak · <kbd>Esc</kbd> back{% endblock %}

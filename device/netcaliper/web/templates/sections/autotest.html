@@ -2,17 +2,18 @@
 {% block title %}AutoTest · netcaliper{% endblock %}
 {% block main %}
 <section class="page autotest">
-  <h1>AutoTest</h1>
+  <h1>{{ icon("autotest", "ico h-ico") }} AutoTest</h1>
   <div class="actions">
     {% for p in profiles %}
     <button class="btn" hx-post="/autotest/start/{{ p.id | urlencode }}" hx-target="#run" hx-swap="innerHTML"
             {% if loop.first %}autofocus{% endif %} title="{{ p.description }}">
-      Run {{ p.name }}{% if p.source != "builtin" %} <span class="small">({{ p.source }})</span>{% endif %}
+      {{ icon("wifi" if p.interface == "test-wifi" else "autotest") }} Run {{ p.name }}{% if p.source != "builtin" %} <span class="small">({{ p.source }})</span>{% endif %}
     </button>
     {% endfor %}
-    <button class="btn btn-alt" hx-post="/autotest/cancel" hx-swap="none">Cancel</button>
+    <button class="btn btn-alt" hx-post="/autotest/cancel" hx-swap="none">{{ icon("cancel") }} Cancel</button>
     <span class="dim small">
-      {% if iface %}on {{ iface.name }}{% if iface.ifname %} · {{ iface.ifname }}{% endif %}{% else %}<span class="warn">no wired test interface</span>{% endif %}
+      wired: {% if iface %}{{ iface.name }}{% if iface.ifname %} · {{ iface.ifname }}{% endif %}{% else %}<span class="warn">none</span>{% endif %}
+      · Wi-Fi: {% if wifi %}{{ wifi.name }}{% if wifi.ifname %} · {{ wifi.ifname }}{% endif %}{% else %}<span class="warn">none</span>{% endif %}
       {% if mock %} · simulated network{% endif %}
     </span>
   </div>

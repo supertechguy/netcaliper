@@ -2,10 +2,10 @@
 {% block title %}Tools · netcaliper{% endblock %}
 {% block main %}
 <section class="page">
-  <h1>Tools <span class="dim">/ hardware</span></h1>
+  <h1>{{ icon("tools", "ico h-ico") }} Tools <span class="dim">/ hardware</span></h1>
   <p>
     <button class="btn" hx-post="/api/v1/hardware/refresh" hx-swap="none"
-            hx-on::after-request="htmx.trigger('#hw', 'refresh')" autofocus>Re-detect</button>
+            hx-on::after-request="htmx.trigger('#hw', 'refresh')" autofocus>{{ icon("reset") }} Re-detect</button>
     <span class="dim">source: {{ inv.source }}{% if mock %} (mock){% endif %}</span>
   </p>
   <div id="hw" hx-get="/partials/hardware" hx-trigger="load, refresh">loading…</div>

@@ -2,7 +2,7 @@
 {% block title %}{{ section.title }} · netcaliper{% endblock %}
 {% block main %}
 <section class="page">
-  <h1>{{ section.title }}</h1>
+  <h1>{{ icon(section.slug, "ico h-ico") }} {{ section.title }}</h1>
   <p class="dim">{{ section.blurb }}</p>
   <p class="notice">Arrives in Phase {{ section.phase }} — see docs/ROADMAP.md.</p>
   {% if section.needs %}

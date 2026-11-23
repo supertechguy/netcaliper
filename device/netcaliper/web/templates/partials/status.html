@@ -1,4 +1,4 @@
-<span class="brand">netcaliper</span>
+<span class="brand">{{ wordmark() }}</span>
 {% if mock %}<span class="pill warn">MOCK HW</span>{% endif %}
 <span class="pill">mgmt: {{ mgmt.ifname if mgmt else "none" }}</span>
 <span class="pill">sync: {% if sync.enabled %}{{ pending }} queued{% else %}off ({{ pending }} queued){% endif %}</span>

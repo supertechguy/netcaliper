@@ -6,6 +6,7 @@
   <a class="tile{% if not t.ready %} not-ready{% endif %}" href="/s/{{ t.s.slug }}" data-hotkey="{{ t.s.hotkey }}"
      {% if loop.first %}autofocus{% endif %}>
     <span class="key">{{ t.s.hotkey | upper }}</span>
+    {{ icon(t.s.slug, "ico tile-ico") }}
     <span class="title">{{ t.s.title }}</span>
     <span class="blurb">{{ t.s.blurb }}</span>
     {% if not t.ready %}<span class="badge">no hardware</span>{% endif %}

@@ -24,12 +24,14 @@ from .base import (
     Neighbor,
     PingResult,
     RouterAdvert,
+    TlsFiles,
 )
+from .wifi_mock import MockAp, WifiMock
 
 GBE = ["10baseT/Half", "10baseT/Full", "100baseT/Half", "100baseT/Full", "1000baseT/Full"]
 
 
-class MockNet:
+class MockNet(WifiMock):
     def __init__(
         self,
         *,
@@ -45,6 +47,8 @@ class MockNet:
         thread_brs: int = 0,  # lifetime-0 prefix advertisers (Thread/Matter border routers)
         speed: int = 1000,
         delay: float = 0.0,
+        wifi_aps: list[MockAp] | None = None,
+        deauth_flood: bool = False,
     ) -> None:
         self.rnd = random.Random(seed)  # noqa: S311 - simulation, not crypto
         self.rogue_dhcp, self.no_dhcp, self.dead_gateway, self.dns_fail = (
@@ -61,6 +65,7 @@ class MockNet:
             delay,
         )
         self.rogue_ra, self.thread_brs = rogue_ra, thread_brs
+        self._wifi_init(wifi_aps, deauth_flood)
         self.vlans: set[str] = set()
         self.applied: dict[str, Lease] = {}
 
@@ -309,8 +314,18 @@ class MockNet:
         self.vlans.discard(ifname)
 
     async def dot1x(
-        self, ifname: str, method: str, identity: str, password: str | None, timeout_s: float = 30.0
+        self,
+        ifname: str,
+        method: str,
+        identity: str,
+        password: str | None,
+        timeout_s: float = 30.0,
+        tls: TlsFiles | None = None,
     ) -> Dot1xResult:
+        if method == "tls" and not (tls and tls.client_cert and tls.private_key):
+            return Dot1xResult(
+                ok=False, method=method, state="config", error="EAP-TLS needs a certificate and key"
+            )
         if self.dot1x_ok:
             return Dot1xResult(ok=True, method=method, state="AUTHENTICATED", auth_ms=self._ms(150, 900))
         return Dot1xResult(
