@@ -3,7 +3,10 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import ipaddress
+import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -15,15 +18,19 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .. import __version__
+from ..core.audit import AuditLog
 from ..core.config import Settings
 from ..core.db import Database
 from ..core.ids import utcnow
 from ..core.outbox import Outbox
+from ..core.rpc import RpcClient
+from ..core.testplane import TestPlane, watch_hotplug
 from ..drivers.registry import HardwareRegistry
 from .sections import BY_SLUG, SECTIONS
 
 HERE = Path(__file__).parent
 templates = Jinja2Templates(directory=HERE / "templates")
+log = logging.getLogger(__name__)
 
 
 def _is_loopback(host: str | None) -> bool:
@@ -35,27 +42,61 @@ def _is_loopback(host: str | None) -> bool:
         return False
 
 
-def create_app(settings: Settings, registry: HardwareRegistry | None = None) -> FastAPI:
-    registry = registry or HardwareRegistry.from_mode(settings.hardware.mode, settings.hardware.roles)
+def create_app(
+    settings: Settings, registry: HardwareRegistry | None = None, plane: TestPlane | None = None
+) -> FastAPI:
+    real = settings.hardware.mode == "real"
+    if registry is None:
+        registry = HardwareRegistry.from_mode(settings.hardware.mode, settings.hardware.roles)
+        if real:
+            registry.agent = RpcClient(settings.agent_socket)
+    reg = registry
+    plane_lock = asyncio.Lock()
+
+    async def refresh_and_place() -> None:
+        """Detect, move test-role devices into/out of the test netns, re-detect if anything moved."""
+        async with plane_lock:
+            inv = await reg.refresh()
+            if app.state.plane is None or not settings.test_plane.auto_assign:
+                return
+            outcomes = await app.state.plane.reconcile(inv)
+            if any(o.ok for o in outcomes):
+                await asyncio.sleep(1.0)  # let the kernel finish re-registering moved links
+                await reg.refresh()
+            if app.state.plane.last_error:
+                reg.inventory.warnings.append(f"test plane: {app.state.plane.last_error}")
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         db = await Database(settings.db_path).open()
         app.state.db = db
         app.state.outbox = Outbox(db)
-        await registry.refresh()
+        if app.state.plane is None and real:
+            app.state.plane = TestPlane(RpcClient(settings.helper_socket), settings.test_netns, AuditLog(db))
+        await refresh_and_place()
+        watcher = None
+        if real and settings.test_plane.hotplug_poll_s > 0:
+            watcher = asyncio.create_task(
+                watch_hotplug(refresh_and_place, settings.test_plane.hotplug_poll_s)
+            )
         try:
             yield
         finally:
+            if watcher:
+                watcher.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await watcher
             await db.close()
 
     app = FastAPI(title="netcaliper", version=__version__, lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.settings = settings
     app.state.registry = registry
+    app.state.plane = plane
 
     @app.middleware("http")
     async def local_only(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-        # Remote (mgmt-interface) access needs login + TLS, which lands in Phase 1. Until then: loopback only.
+        # Remote (mgmt-interface) access needs login + TLS (planned alongside cloud enrollment).
+        # Until then: loopback only.
         if not _is_loopback(request.client.host if request.client else None):
             return JSONResponse({"detail": "remote access requires login (not yet enabled)"}, status_code=403)
         return await call_next(request)
@@ -119,6 +160,7 @@ def create_app(settings: Settings, registry: HardwareRegistry | None = None) -> 
 
     @app.post("/api/v1/hardware/refresh")
     async def hardware_refresh() -> dict[str, Any]:
-        return (await registry.refresh()).model_dump(mode="json")
+        await refresh_and_place()
+        return registry.inventory.model_dump(mode="json")
 
     return app

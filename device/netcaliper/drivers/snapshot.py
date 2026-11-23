@@ -63,11 +63,13 @@ class NetInterface(BaseModel):
     operstate: str = "unknown"
     default_route: bool = False
     link_modes: list[str] = Field(default_factory=list)
+    netns: str | None = None  # None = root namespace; else the test netns it was seen in
 
 
 class Wiphy(BaseModel):
     name: str
     iw_info: str
+    netns: str | None = None
 
 
 class BtAdapter(BaseModel):
@@ -167,7 +169,7 @@ def _bus_of(realpath: str) -> tuple[str, str | None]:
     return "other", None
 
 
-def _default_route_ifaces() -> set[str]:
+def default_route_ifaces() -> set[str]:
     out: set[str] = set()
     text = _read(Path("/proc/net/route")) or ""
     for line in text.splitlines()[1:]:
@@ -190,6 +192,60 @@ def _link_modes(ifname: str) -> list[str]:
         if grab:
             modes += [m for m in line.split() if m != "Not"]
     return modes
+
+
+def collect_net(sysfs: Path = Path("/sys")) -> tuple[list[NetInterface], list[Wiphy]]:
+    """Network interfaces and Wi-Fi phys of the *current* network namespace.
+
+    The agent calls this inside the test netns (systemd gives it a matching sysfs mount); core
+    merges the result with its own root-namespace view via `merge_netns`.
+    """
+    net: list[NetInterface] = []
+    wiphys: list[Wiphy] = []
+    defroutes = default_route_ifaces()
+    for n in sorted((sysfs / "class/net").glob("*")):
+        dev = n / "device"
+        real = os.path.realpath(dev) if dev.exists() else os.path.realpath(n)
+        bus, usb_path = _bus_of(real)
+        phy = _read(n / "phy80211/name")
+        wireless = phy is not None or (n / "wireless").exists()
+        iface = NetInterface(
+            name=n.name,
+            mac=_read(n / "address") or "",
+            driver=_driver_of(dev) if dev.exists() else None,
+            bus=bus,
+            usb_path=usb_path,
+            wireless=wireless,
+            phy=phy,
+            has_phydev=(n / "phydev").exists(),
+            operstate=_read(n / "operstate") or "unknown",
+            default_route=n.name in defroutes,
+        )
+        if bus not in ("virtual",) and not wireless and n.name != "lo":
+            iface.link_modes = _link_modes(n.name)
+        net.append(iface)
+
+    for p in sorted((sysfs / "class/ieee80211").glob("*")):
+        wiphys.append(Wiphy(name=p.name, iw_info=_run(["iw", "phy", p.name, "info"])))
+    return net, wiphys
+
+
+def merge_netns(
+    snap: SystemSnapshot, netns: str, net: list[NetInterface], wiphys: list[Wiphy]
+) -> SystemSnapshot:
+    """Add interfaces/phys seen inside `netns` to a root-namespace snapshot.
+
+    A default route inside the test netns is test traffic, never management, so it is cleared.
+    """
+    out = snap.model_copy(deep=True)
+    seen = {n.mac for n in out.net if n.mac}
+    for n in net:
+        if n.name == "lo" or n.bus == "virtual" or (n.mac and n.mac in seen):
+            continue
+        out.net.append(n.model_copy(update={"netns": netns, "default_route": False}))
+    have = {w.name for w in out.wiphys}
+    out.wiphys += [w.model_copy(update={"netns": netns}) for w in wiphys if w.name not in have]
+    return out
 
 
 def collect_real(sysfs: Path = Path("/sys")) -> SystemSnapshot:
@@ -243,33 +299,7 @@ def collect_real(sysfs: Path = Path("/sys")) -> SystemSnapshot:
             )
         )
 
-    # net
-    defroutes = _default_route_ifaces()
-    for n in sorted((sysfs / "class/net").glob("*")):
-        dev = n / "device"
-        real = os.path.realpath(dev) if dev.exists() else os.path.realpath(n)
-        bus, usb_path = _bus_of(real)
-        phy = _read(n / "phy80211/name")
-        wireless = phy is not None or (n / "wireless").exists()
-        iface = NetInterface(
-            name=n.name,
-            mac=_read(n / "address") or "",
-            driver=_driver_of(dev) if dev.exists() else None,
-            bus=bus,
-            usb_path=usb_path,
-            wireless=wireless,
-            phy=phy,
-            has_phydev=(n / "phydev").exists(),
-            operstate=_read(n / "operstate") or "unknown",
-            default_route=n.name in defroutes,
-        )
-        if bus not in ("virtual",) and not wireless and n.name != "lo":
-            iface.link_modes = _link_modes(n.name)
-        snap.net.append(iface)
-
-    # wiphys
-    for p in sorted((sysfs / "class/ieee80211").glob("*")):
-        snap.wiphys.append(Wiphy(name=p.name, iw_info=_run(["iw", "phy", p.name, "info"])))
+    snap.net, snap.wiphys = collect_net(sysfs)
 
     # bluetooth
     for h in sorted((sysfs / "class/bluetooth").glob("hci*")):

@@ -65,6 +65,7 @@ class HardwareDevice(BaseModel):
     bus_path: str | None = None
     ifname: str | None = None  # display/plumbing only — never select devices by it
     phy: str | None = None
+    netns: str | None = None  # where the interface lives now (None = root namespace)
     mac: str | None = None
     serial: str | None = None
     capabilities: dict[Capability, CapState] = Field(default_factory=dict)

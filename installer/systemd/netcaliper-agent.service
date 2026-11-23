@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Test-plane executor. systemd starts it *inside* the namespace (setns would need CAP_SYS_ADMIN),
+# with a sysfs view of that namespace, and only the two network capabilities.
+[Unit]
+Description=netcaliper test-plane agent (in netns @NETNS@)
+BindsTo=netcaliper-netns.service
+After=netcaliper-netns.service
+
+[Service]
+Type=simple
+User=netcaliper
+Group=netcaliper
+Environment=NETCALIPER_CONFIG=/etc/netcaliper/netcaliper.toml
+NetworkNamespacePath=/run/netns/@NETNS@
+ExecStart=@PREFIX@/venv/bin/netcaliper agent
+Restart=on-failure
+RestartSec=2
+AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_RAW CAP_NET_ADMIN
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+StateDirectory=netcaliper
+StateDirectoryMode=0750
+ReadWritePaths=/run/netcaliper
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

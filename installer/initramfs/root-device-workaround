@@ -1,0 +1,4 @@
+# Installed by netcaliper. The ClockworkPi uConsole image boots without an initramfs
+# (root=PARTUUID=... on the kernel cmdline), but mkinitramfs can't resolve /dev/root and fails,
+# which leaves apt upgrades half-configured. MODULES=most skips the root-device probe.
+MODULES=most

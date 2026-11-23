@@ -3,9 +3,9 @@ name: device-ci
 on:
   push:
     branches: [main]
-    paths: ["device/**", "schemas/**", ".github/workflows/device-ci.yml"]
+    paths: ["device/**", "schemas/**", "installer/**", ".github/workflows/device-ci.yml"]
   pull_request:
-    paths: ["device/**", "schemas/**", ".github/workflows/device-ci.yml"]
+    paths: ["device/**", "schemas/**", "installer/**", ".github/workflows/device-ci.yml"]
   schedule:
     - cron: "17 6 * * 1"  # weekly arm64 run
   workflow_dispatch:
@@ -35,6 +35,48 @@ jobs:
       - run: pytest -q
         env:
           NETCALIPER_HW: mock:uconsole-cm4-full
+
+  # Real install on a systemd host: install twice (idempotency), exercise the API, run the
+  # root-only netns integration tests, uninstall, and check nothing is left behind.
+  installer:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: install (--dev)
+        working-directory: .
+        run: sudo ./installer/install.sh --dev | tee /tmp/install.log && grep -q "==> Done" /tmp/install.log
+      - name: re-run is a no-op
+        working-directory: .
+        run: |
+          out=$(sudo ./installer/install.sh --dev --skip-apt)
+          echo "$out"
+          echo "$out" | grep -q "==> Done" || { echo "::error::install did not finish"; exit 1; }
+          if echo "$out" | grep -E "updated|created|installed netcaliper"; then
+            echo "::error::second install run changed something"; exit 1
+          fi
+      - name: services + API
+        working-directory: .
+        run: |
+          for u in netcaliper-netns netcaliper-helper netcaliper-agent netcaliper-core; do
+            systemctl is-active "$u" || { journalctl -u "$u" --no-pager | tail -50; exit 1; }
+          done
+          curl -fsS http://127.0.0.1:8080/api/v1/health
+          curl -fsS http://127.0.0.1:8080/api/v1/hardware | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["devices"]), "devices")'
+          test -S /run/netcaliper/helper.sock && test -S /run/netcaliper/agent.sock
+          sudo ip netns list | grep -q ncal-test
+          sudo ip netns exec ncal-test nft list table inet netcaliper >/dev/null
+          netcaliper doctor --no-color || true
+      - name: netns integration tests (root)
+        run: |
+          python3 -m venv /tmp/v && /tmp/v/bin/pip install -q -e '.[dev]'
+          sudo NETCALIPER_HW=mock:uconsole-cm4-full /tmp/v/bin/pytest -q -m netns -p no:cacheprovider
+      - name: uninstall --purge leaves nothing behind
+        working-directory: .
+        run: |
+          sudo /opt/netcaliper/uninstall.sh --purge
+          ! ls /etc/systemd/system/netcaliper-* /opt/netcaliper /etc/netcaliper /var/lib/netcaliper 2>/dev/null
+          ! id netcaliper 2>/dev/null
+          ! sudo ip netns list | grep -q ncal-test
 
   # Repo is private for now: no free native arm64 runners, so emulate (slow — main/weekly only).
   # Switch to `runs-on: ubuntu-24.04-arm` once the repo is public.

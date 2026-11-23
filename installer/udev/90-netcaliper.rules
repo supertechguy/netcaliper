@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Give the netcaliper service user access to its USB radios and boards. No other changes.
+ACTION=="remove", GOTO="netcaliper_end"
+
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="0bda", ATTR{idProduct}=="2838", MODE="0660", GROUP="netcaliper"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="0bda", ATTR{idProduct}=="2832", MODE="0660", GROUP="netcaliper"
+# nRF24LU1+ with RFStorm research firmware (MouseJack *detection*) / Crazyradio PA
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="1915", ATTR{idProduct}=="0102", MODE="0660", GROUP="netcaliper"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="1915", ATTR{idProduct}=="7777", MODE="0660", GROUP="netcaliper"
+# HackRF One (future wideband spectrum)
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="1d50", ATTR{idProduct}=="6089", MODE="0660", GROUP="netcaliper"
+# Future netcaliper boards: USB CDC, identified by product string (hardware/)
+SUBSYSTEM=="tty", ATTRS{product}=="netcaliper-probe", MODE="0660", GROUP="netcaliper", SYMLINK+="netcaliper-probe"
+SUBSYSTEM=="tty", ATTRS{product}=="netcaliper-poe", MODE="0660", GROUP="netcaliper", SYMLINK+="netcaliper-poe"
+
+LABEL="netcaliper_end"

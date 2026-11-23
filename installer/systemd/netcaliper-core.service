@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Web UI/API, storage, scheduler, root-namespace drivers. Loopback only.
+[Unit]
+Description=netcaliper core (UI/API on 127.0.0.1)
+After=network.target netcaliper-helper.service netcaliper-agent.service bluetooth.service
+Wants=netcaliper-helper.service netcaliper-agent.service
+
+[Service]
+Type=simple
+User=netcaliper
+Group=netcaliper
+Environment=NETCALIPER_CONFIG=/etc/netcaliper/netcaliper.toml
+ExecStart=@PREFIX@/venv/bin/netcaliper serve
+Restart=always
+RestartSec=2
+AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_RAW CAP_NET_ADMIN
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+StateDirectory=netcaliper
+StateDirectoryMode=0750
+ReadWritePaths=/run/netcaliper
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

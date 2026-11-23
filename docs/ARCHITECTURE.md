@@ -93,10 +93,17 @@ Defaults (overridable in Settings):
 - best monitor-capable radio (scored: monitor support, bands, driver reliability table) → `monitor`
 - remaining Wi-Fi radios → `test-wifi`
 
-Hotplug: core watches netlink + udev; on a new device it asks the helper to move the phy/link into
-`ncal-test` (Wi-Fi is moved per *phy*: `iw phy <n> set netns name ncal-test`) and to make
-NetworkManager ignore it (keyfile `unmanaged-devices=mac:…`, applied before the move so NM never
-races us).
+Placement (`core/testplane.py`, implemented in Phase 1): after each detection, core computes a plan
+(test roles → into `ncal-test`, anything else found there → back out) and asks the helper to apply it:
+first the NetworkManager keyfile (`unmanaged-devices=mac:…`, so NM never races us), then one
+`plane.move_in`/`plane.move_out` per device, each audit-logged. Wi-Fi moves per *phy*
+(`iw phy <n> set netns name ncal-test`). Once moved, devices are invisible from the root namespace, so
+core merges the agent's `snapshot.net` view (systemd ≥ 257 gives a netns-bound service a matching sysfs
+mount) and tags each device with `netns`. A default route inside the test netns never makes a device
+`mgmt`.
+
+Hotplug: a cheap polling signature (USB device + root-netns netdev listing, every 5 s, then a 2 s
+settle) triggers detect → plan → apply. No udev/netlink dependency; same behavior on every distro.
 
 ---
 
@@ -338,7 +345,10 @@ announce, iperf, ARP sweep, port blink on our own link.
 ---
 
 ## 10. Installer (`installer/`)
-`install.sh [--dev] [--no-kiosk] [--branch X]`, idempotent (every step is check-then-apply).
+`install.sh [--dev] [--no-kiosk] [--start-kiosk] [--vnc|--no-vnc] [--skip-apt] [--branch X]`, idempotent
+(every step is check-then-apply). `--dev` = x86/dev host: services, no kiosk, no OS tweaks; the app is
+installed (non-editable) from the working tree, and re-running after edits reinstalls only when the
+source hash changed.
 OS detection: Pi OS Trixie / Bookworm arm64, Debian/Ubuntu x86 (`--dev`).
 **Reference uConsole base image: ClockworkPi `uConsole_CM4_v3.1_64bit.img`** (vendor kernel +
 overlays for panel, keyboard, AXP228 PMIC). The installer treats it as "fresh Pi OS": it detects the
@@ -363,6 +373,14 @@ channel. Installer implications:
   the Wi-Fi mgmt link). The installer writes an NM `unmanaged-devices` drop-in keyed by MAC for every
   test-role interface (regenerated on role change) before moving it into `ncal-test`. Detection
   already prefers built-in interfaces for mgmt and never takes the only wired NIC.
+- Kiosk: `cage -s` on tty1 via `PAMName=` (logind session, no seatd). logind only activates a session
+  on the foreground VT, so the unit runs `chvt 1` first (needed after stopping lightdm). The DSI panel
+  is rotated by `wlr-randr --transform 270` inside the session; Chromium gets a fresh profile per start.
+- VNC (opt-in `--vnc`, remembered): `wayvnc` inside the cage session (cage 0.3 offers screencopy +
+  virtual keyboard/pointer, so view *and* control work); see SECURITY.md. `/etc/netcaliper` is 0751 so
+  the kiosk user can reach `wayvnc/` without being able to list or read the rest.
+- Measured on the uConsole (2026-11-23): ~21 s to userspace with kiosk; reinstall ~65 s; an
+  immediate re-run changes nothing.
 - uConsole has no Ethernet jack; the CM4's `eth0` (bcmgenet) is forced `unused`. The keyboard MCU
   (`1eaf:0024`) identifies the platform. Steps: apt deps (package
 names resolved per release, e.g. `chromium` vs `chromium-browser`) → users (`netcaliper`, `ncal-kiosk`)

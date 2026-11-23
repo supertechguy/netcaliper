@@ -1,0 +1,34 @@
+#!/usr/sbin/nft -f
+# SPDX-License-Identifier: GPL-3.0-only
+# Loaded *inside* the test netns only. The tester measures; it never routes and never offers
+# services on the network under test. AF_PACKET capture sees frames before this filter, so
+# passive tests are unaffected. Re-loading is atomic and idempotent (declare, delete, define).
+
+table inet netcaliper {}
+delete table inet netcaliper
+
+table inet netcaliper {
+	# Ports opened temporarily by the helper for the iperf3 reflector (Phase 9).
+	set reflector_tcp { type inet_service; flags timeout; }
+	set reflector_udp { type inet_service; flags timeout; }
+
+	chain input {
+		type filter hook input priority filter; policy drop;
+		iif "lo" accept
+		ct state established,related accept
+		ct state invalid drop
+		meta l4proto { icmp, ipv6-icmp } accept
+		udp dport 68 accept comment "DHCPv4 client"
+		udp dport 546 accept comment "DHCPv6 client"
+		tcp dport @reflector_tcp accept
+		udp dport @reflector_udp accept
+	}
+
+	chain forward {
+		type filter hook forward priority filter; policy drop;
+	}
+
+	chain output {
+		type filter hook output priority filter; policy accept;
+	}
+}

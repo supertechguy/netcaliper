@@ -155,7 +155,7 @@ def render_text(rep: DoctorReport, color: bool = True) -> str:
     lines += ["", c(B, "Devices")]
     for d in inv.devices:
         where = " ".join(x for x in (d.ifname, d.phy, d.usb_id) if x)
-        role = f"  role={d.role}" if d.role else ""
+        role = (f"  role={d.role}" if d.role else "") + (f"  [netns {d.netns}]" if d.netns else "")
         lines.append(f"  {c(G, d.name)}  {c(DIM, where)}{role}")
         lines.append(f"    {c(DIM, 'id ' + d.id)}")
         for cap, s in d.capabilities.items():

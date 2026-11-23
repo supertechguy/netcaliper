@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# cage + Chromium on tty1 as the unprivileged ncal-kiosk user (no capabilities).
+# Recovery: Ctrl+Alt+F2 for a text console (cage -s allows VT switching).
+[Unit]
+Description=netcaliper kiosk (cage + Chromium on tty1)
+After=systemd-user-sessions.service plymouth-quit-wait.service getty@tty1.service
+After=dbus.socket systemd-logind.service netcaliper-core.service
+Wants=dbus.socket systemd-logind.service netcaliper-core.service
+Conflicts=getty@tty1.service
+ConditionPathExists=/dev/tty0
+
+[Service]
+Type=simple
+User=ncal-kiosk
+Group=ncal-kiosk
+PAMName=netcaliper-kiosk
+WorkingDirectory=~
+EnvironmentFile=-/etc/netcaliper/kiosk.env
+# logind only activates the session on the foreground VT; after a display manager is stopped
+# (or a user switched VTs) that isn't tty1. "+" = as root, "-" = failure is not fatal.
+ExecStartPre=+-/usr/bin/chvt 1
+ExecStart=/usr/bin/cage -s -- @PREFIX@/libexec/kiosk-session
+Restart=always
+RestartSec=2
+UtmpIdentifier=tty1
+UtmpMode=user
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+StandardInput=tty-fail
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=graphical.target

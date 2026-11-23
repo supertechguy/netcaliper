@@ -133,6 +133,7 @@ def _wired(iface: NetInterface, usb: UsbDevice | None) -> HardwareDevice:
         bus=iface.bus,
         bus_path=iface.usb_path,
         ifname=iface.name,
+        netns=iface.netns,
         mac=iface.mac,
         capabilities=caps,
         notes=_usb_note(usb, "nic"),
@@ -175,6 +176,7 @@ def _wifi(iface: NetInterface, usb: UsbDevice | None, iw_text: str | None) -> Ha
         bus=iface.bus,
         bus_path=iface.usb_path,
         ifname=iface.name,
+        netns=iface.netns,
         phy=iface.phy,
         mac=iface.mac,
         capabilities=caps,
@@ -249,7 +251,8 @@ def _wifi_score(d: HardwareDevice) -> int:
 
 
 def assign_roles(devices: list[HardwareDevice], snap: SystemSnapshot, overrides: dict[str, Role]) -> None:
-    by_if = {n.name: n for n in snap.net}
+    # Keyed by MAC: ifnames are only unique per namespace.
+    by_mac = {n.mac: n for n in snap.net if n.mac}
     netdevs = [d for d in devices if d.kind in ("nic", "wifi")]
     for d in netdevs:
         if d.id in overrides:
@@ -265,7 +268,7 @@ def assign_roles(devices: list[HardwareDevice], snap: SystemSnapshot, overrides:
     if not any(d.role == "mgmt" for d in netdevs):
         internal_wifi = next((d for d in free("wifi") if d.driver in INTERNAL_WIFI_DRIVERS), None)
         routed = sorted(
-            (d for d in netdevs if d.role is None and d.ifname and by_if[d.ifname].default_route),
+            (d for d in netdevs if d.role is None and d.mac in by_mac and by_mac[d.mac].default_route),
             key=lambda d: (d.bus == "usb", d.kind == "nic"),
         )
         mgmt = routed[0] if routed else None

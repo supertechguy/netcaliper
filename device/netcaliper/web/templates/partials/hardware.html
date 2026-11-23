@@ -8,7 +8,7 @@
   <tr tabindex="0">
     <td>{{ d.name }}<div class="dim small">{{ d.usb_id or d.driver or "" }}</div></td>
     <td>{{ d.role or "—" }}</td>
-    <td>{{ d.ifname or d.phy or "" }}</td>
+    <td>{{ d.ifname or d.phy or "" }}{% if d.netns %}<div class="dim small">in {{ d.netns }}</div>{% endif %}</td>
     <td>
       {% for cap, st in d.capabilities.items() %}
       <span class="cap cap-{{ st.state }}" title="{{ st.reason }}">{{ cap.value }}</span>

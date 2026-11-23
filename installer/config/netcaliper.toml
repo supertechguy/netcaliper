@@ -1,0 +1,18 @@
+# netcaliper configuration. NETCALIPER_* environment variables override (NETCALIPER_WEB__PORT=9000).
+# The installer never overwrites this file.
+
+[hardware]
+mode = "real"             # or "mock:<fixture>" for a demo without hardware
+
+# Pin roles by stable device id (see `netcaliper doctor`); unlisted devices are auto-assigned.
+[hardware.roles]
+# "nic:00:05:1b:00:00:00" = "test-wired"
+# "wifi:9c:ef:d5:00:00:00" = "monitor"
+
+[web]
+host = "127.0.0.1"        # remote access arrives with login + TLS
+port = 8080
+
+[test_plane]
+auto_assign = true        # move test-role interfaces into the test netns automatically
+hotplug_poll_s = 5.0

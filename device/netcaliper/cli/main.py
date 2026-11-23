@@ -7,6 +7,7 @@ import argparse
 import asyncio
 import sys
 from pathlib import Path
+from typing import Any
 
 from ..core.config import load_settings
 
@@ -31,12 +32,34 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         out = anonymize(snap) if args.anonymize else snap
         Path(args.record).write_text(dump_snapshot(out))
         print(f"snapshot written to {args.record}", file=sys.stderr)
+    agent_note = None
+    if not mode.startswith("mock") and settings.agent_socket.exists():
+        snap, agent_note = _merge_agent_view(settings, snap)
     inv = detect(snap, settings.hardware.roles)
+    if agent_note:
+        inv.warnings.append(agent_note)
     rep = build_report(settings, snap, inv)
     print(
         render_json(rep) if args.json else render_text(rep, color=sys.stdout.isatty() and not args.no_color)
     )
     return 1 if rep.worst == "fail" else 0
+
+
+def _merge_agent_view(settings: Any, snap: Any) -> tuple[Any, str | None]:
+    from ..core.rpc import RpcClient, RpcError
+    from ..drivers.snapshot import NetInterface, Wiphy, merge_netns
+
+    try:
+        view = asyncio.run(RpcClient(settings.agent_socket, timeout=10).call("snapshot.net"))
+    except (RpcError, TimeoutError, OSError) as e:
+        return snap, f"test-plane agent unreachable ({e}); test-netns devices not shown"
+    merged = merge_netns(
+        snap,
+        str(view["netns"]),
+        [NetInterface.model_validate(n) for n in view["net"]],
+        [Wiphy.model_validate(w) for w in view["wiphys"]],
+    )
+    return merged, None
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
@@ -75,8 +98,58 @@ def cmd_db(args: argparse.Namespace) -> int:
     return 0
 
 
+def _daemon_logging() -> None:
+    import logging
+
+    # journald adds timestamps; keep lines short.
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+
+
+def cmd_helper(args: argparse.Namespace) -> int:
+    from ..helper.ops import Ops
+    from ..helper.server import build_server
+
+    _daemon_logging()
+    settings = load_settings()
+    server = build_server(Ops(settings.test_netns), settings.helper_socket, args.service_user)
+    asyncio.run(server.serve_forever())
+    return 0
+
+
+def cmd_agent(args: argparse.Namespace) -> int:
+    from ..agent.server import build_server
+
+    _daemon_logging()
+    settings = load_settings()
+    asyncio.run(build_server(settings.test_netns, settings.agent_socket).serve_forever())
+    return 0
+
+
+def cmd_netns(args: argparse.Namespace) -> int:
+    from ..helper.ops import OpError, Ops
+
+    settings = load_settings()
+    ops = Ops(settings.test_netns)
+    nft = Path(args.nft) if args.nft else settings.config_dir / "nftables/ncal-test.nft"
+    try:
+        done = asyncio.run(
+            ops.netns_up(nft if nft.exists() or args.nft else None)
+            if args.action == "up"
+            else ops.netns_down()
+        )
+    except OpError as e:
+        print(f"netns {args.action} failed: {e}", file=sys.stderr)
+        return 1
+    for line in done:
+        print(line)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
+    from .. import __version__
+
     ap = argparse.ArgumentParser(prog="netcaliper")
+    ap.add_argument("--version", action="version", version=f"netcaliper {__version__}")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     d = sub.add_parser("doctor", help="report hardware, capabilities, dependencies, services")
@@ -100,6 +173,18 @@ def main(argv: list[str] | None = None) -> int:
 
     db = sub.add_parser("db", help="apply database migrations")
     db.set_defaults(fn=cmd_db)
+
+    h = sub.add_parser("helper", help="run the privileged helper daemon (root; systemd)")
+    h.add_argument("--service-user", default="netcaliper")
+    h.set_defaults(fn=cmd_helper)
+
+    ag = sub.add_parser("agent", help="run the test-plane agent (inside the test netns; systemd)")
+    ag.set_defaults(fn=cmd_agent)
+
+    ns = sub.add_parser("netns", help="create/tear down the test network namespace (root)")
+    ns.add_argument("action", choices=["up", "down"])
+    ns.add_argument("--nft", help="nftables ruleset to load inside the namespace")
+    ns.set_defaults(fn=cmd_netns)
 
     args = ap.parse_args(argv)
     return int(args.fn(args))

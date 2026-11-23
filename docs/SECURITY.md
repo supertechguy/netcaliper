@@ -22,7 +22,19 @@ The box is plugged into untrusted networks.
   separate user with no capabilities.
 - Root is confined to `netcaliper-helper`: allowlisted, schema-validated actions, peer-credential
   checked, no shell. Changes to the helper get a dedicated review.
-- Web UI: loopback only until Phase 1 adds login (argon2id) + TLS for mgmt-interface access.
+- Web UI/API: loopback only. Remote browser access (login with argon2id + TLS on the mgmt interface)
+  is deferred to Phase 4, next to cloud enrollment; until then remote use is VNC (below) or SSH.
+- Remote view/control (opt-in, `install.sh --vnc`): `wayvnc` attached to the kiosk's cage session,
+  running as `ncal-kiosk` (no capabilities). Listens on :5900 in the **root namespace only**, so it is
+  reachable from the management network and never from a network under test. Authentication is
+  mandatory, and only encrypted security types are offered: VeNCrypt (TLS, self-signed cert generated
+  on the device) and RSA-AES; no "None", no legacy VNC-password type. The password is generated on the
+  device (`/etc/netcaliper/wayvnc/config`, `root:ncal-kiosk 0640`) and never leaves it unless you read
+  it. A VNC user has exactly the powers of someone at the keyboard: active tests still need an
+  engagement + on-screen confirmation, and are audit-logged.
+- Test-plane placement: core asks the helper to move test-role links/phys into `ncal-test` by MAC; the
+  helper resolves MAC→ifname itself, refuses to move the only default-route interface, and every move
+  is written to the hash-chained audit log.
 
 ## Cloud
 - Device tokens: 32 random bytes, stored as SHA-256, revocable. Enrollment codes: one-time, 15 min.

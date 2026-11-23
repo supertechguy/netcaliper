@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Creates the test-plane network namespace (+ sysctls, nftables). Stopping it deletes the
+# namespace, which returns every test interface to the root namespace.
+[Unit]
+Description=netcaliper test network namespace (@NETNS@)
+Documentation=https://github.com/supertechguy/netcaliper/blob/main/docs/ARCHITECTURE.md
+After=network-pre.target
+Before=netcaliper-helper.service netcaliper-agent.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=NETCALIPER_CONFIG=/etc/netcaliper/netcaliper.toml
+ExecStart=@PREFIX@/venv/bin/netcaliper netns up
+ExecReload=@PREFIX@/venv/bin/netcaliper netns up
+ExecStop=@PREFIX@/venv/bin/netcaliper netns down
+
+[Install]
+WantedBy=multi-user.target

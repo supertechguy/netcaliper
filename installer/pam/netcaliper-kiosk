@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# PAM stack for netcaliper-kiosk.service: no authentication (systemd starts it), but a real
+# logind session so cage gets the seat (DRM + input) without root or seatd.
+auth     required pam_permit.so
+account  required pam_unix.so
+session  required pam_unix.so
+session  required pam_systemd.so

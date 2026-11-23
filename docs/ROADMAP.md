@@ -12,13 +12,16 @@
 | 2026-11-22 | License: GPL-3.0; **no scapy** (GPL-2.0-only) — dpkt + own builders/capture |
 | 2026-11-22 | Repo private until end of Phase 1, then public; commits use GitHub noreply email |
 | 2026-11-22 | Cloud language: TypeScript + Hono (Python Workers rejected for now: 10 ms free-tier CPU) |
+| 2026-11-23 | Remote view/control via opt-in VNC (`wayvnc` in the kiosk session, auth + TLS/RSA-AES, root netns only) |
+| 2026-11-23 | Remote *browser* access (login + TLS) moved from Phase 1 to Phase 4 (with enrollment); VNC covers remote use until then |
+| 2026-11-23 | Hotplug by polling a USB/netdev signature (5 s) instead of udev/netlink — portable, no extra deps |
 
 ## Phases
 
 | # | Phase | Exit criteria | Status |
 |---|---|---|---|
-| 0 | Foundation | scaffold, docs, config, SQLite + outbox, capability layer + mocks + fixtures, `netcaliper doctor` detects all current hardware, FastAPI UI shell with home tiles + keyboard nav, CI green | done (CI runs on first push) |
-| 1 | Installer + kiosk | fresh Pi OS → boots into UI on uConsole; `--dev` on x86; `ncal-test` netns + agent + helper; nftables; idempotent re-run; uninstall | planned |
+| 0 | Foundation | scaffold, docs, config, SQLite + outbox, capability layer + mocks + fixtures, `netcaliper doctor` detects all current hardware, FastAPI UI shell with home tiles + keyboard nav, CI green | done |
+| 1 | Installer + kiosk | fresh Pi OS → boots into UI on uConsole; `--dev` on x86; `ncal-test` netns + agent + helper; nftables; idempotent re-run; uninstall | done (uConsole: boot-to-kiosk, reinstall, uninstall verified; x86 `--dev` verified in CI) |
 | 2 | Wired AutoTest | link, LLDP/CDP/EDP, DHCP (+rogue), DNS, gateway, IPv6, ping/TCP/HTTP/FTP, VLAN, 802.1X wired, profiles + thresholds, port blink, cable-test probe, results screen; netns integration tests | planned |
 | 3 | Wi-Fi core | multi-radio scan, IE decoding, channel/interference analysis, connection test (PSK + EAP), roaming, client discovery (monitor), locate | planned |
 | 4 | Cloud sync v1 | Worker + D1 + migrations + Actions deploy, enroll, sync, config pull, Access JWT check, usage meter + back-off, retention cron, basic dashboard | planned |
@@ -103,7 +106,11 @@
 | Feature | Src | Module | Hardware | Phase | Status |
 |---|---|---|---|---|---|
 | `netcaliper doctor` | X | `cli.doctor` | — | 0 | done |
-| Kiosk boot, splash, blanking control, uConsole tweaks | X | installer | uConsole | 1 | planned |
+| Kiosk boot, rotation, uConsole tweaks | X | installer | uConsole | 1 | done |
+| Remote view + control (VNC) | E | installer (`--vnc`) | — | 1 | done |
+| Test plane: auto-placement of test interfaces in `ncal-test`, hotplug | X | `core.testplane`, helper, agent | — | 1 | done |
+| Boot splash, screen blanking control | X | installer / UI | uConsole | 2 | planned |
+| Remote browser access (login + TLS on mgmt) | E | `web` | — | 4 | planned |
 | HTML + PDF per-run and per-site reports | E/C | `reports` | — | 9 | planned |
 | Cloud: enroll, sync, config pull, dashboard | E/C (Link-Live) | `cloud/` | — | 4 | planned |
 | Cloud: survey viewer, findings, audit, editors, share links | E/C | `cloud/` | — | 4–9 | planned |

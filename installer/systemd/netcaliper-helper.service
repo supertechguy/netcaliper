@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# The only root daemon: allowlisted, schema-validated actions over /run/netcaliper/helper.sock.
+[Unit]
+Description=netcaliper privileged helper
+After=netcaliper-netns.service
+Wants=netcaliper-netns.service
+
+[Service]
+Type=simple
+Environment=NETCALIPER_CONFIG=/etc/netcaliper/netcaliper.toml
+ExecStart=@PREFIX@/venv/bin/netcaliper helper
+Restart=on-failure
+RestartSec=2
+UMask=0077
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+ProtectSystem=full
+ReadWritePaths=-/etc/NetworkManager/conf.d /run/netcaliper
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictRealtime=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6
+# ip netns exec needs SYS_ADMIN (setns + sysfs remount); chown/chmod of the socket.
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_SYS_ADMIN CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE
+
+[Install]
+WantedBy=multi-user.target

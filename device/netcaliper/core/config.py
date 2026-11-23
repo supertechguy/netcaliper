@@ -33,10 +33,20 @@ class HardwareSettings(BaseModel):
     roles: dict[str, Role] = Field(default_factory=dict)
 
 
+class TestPlaneSettings(BaseModel):
+    __test__ = False
+    # Move test-role interfaces into the test netns automatically (on start, refresh and hotplug).
+    auto_assign: bool = True
+    # Seconds between cheap hotplug checks (USB + netdev listing); 0 disables.
+    hotplug_poll_s: float = 5.0
+
+
 class Settings(BaseModel):
     data_dir: Path = Path("/var/lib/netcaliper")
     config_dir: Path = Path("/etc/netcaliper")
-    test_netns: str = "ncal-test"
+    run_dir: Path = Path("/run/netcaliper")
+    test_netns: str = Field(default="ncal-test", pattern=r"^[a-z][a-z0-9-]{0,30}$")
+    test_plane: TestPlaneSettings = Field(default_factory=TestPlaneSettings)
     web: WebSettings = Field(default_factory=WebSettings)
     sync: SyncSettings = Field(default_factory=SyncSettings)
     hardware: HardwareSettings = Field(default_factory=HardwareSettings)
@@ -48,6 +58,14 @@ class Settings(BaseModel):
     @property
     def artifacts_dir(self) -> Path:
         return self.data_dir / "artifacts"
+
+    @property
+    def helper_socket(self) -> Path:
+        return self.run_dir / "helper.sock"
+
+    @property
+    def agent_socket(self) -> Path:
+        return self.run_dir / "agent.sock"
 
 
 def _env_overrides(env: dict[str, str]) -> dict[str, Any]:
