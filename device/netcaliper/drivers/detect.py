@@ -258,12 +258,20 @@ def assign_roles(devices: list[HardwareDevice], snap: SystemSnapshot, overrides:
     def free(kind: str) -> list[HardwareDevice]:
         return [d for d in netdevs if d.kind == kind and d.role is None]
 
-    # mgmt: explicit override wins; else the interface holding the default route; else internal Wi-Fi.
+    # mgmt: explicit override wins; else an interface holding a default route, preferring built-in
+    # (non-USB) ones — a USB dongle is usually there to be tested, and NetworkManager will happily
+    # DHCP it and give it the lowest metric. Never take the only wired NIC for mgmt when an
+    # internal radio can do the job. Fallback: internal Wi-Fi.
     if not any(d.role == "mgmt" for d in netdevs):
-        mgmt = next(
-            (d for d in netdevs if d.role is None and d.ifname and by_if[d.ifname].default_route), None
+        internal_wifi = next((d for d in free("wifi") if d.driver in INTERNAL_WIFI_DRIVERS), None)
+        routed = sorted(
+            (d for d in netdevs if d.role is None and d.ifname and by_if[d.ifname].default_route),
+            key=lambda d: (d.bus == "usb", d.kind == "nic"),
         )
-        mgmt = mgmt or next((d for d in free("wifi") if d.driver in INTERNAL_WIFI_DRIVERS), None)
+        mgmt = routed[0] if routed else None
+        if mgmt and mgmt.kind == "nic" and len(free("nic")) == 1 and internal_wifi:
+            mgmt = internal_wifi
+        mgmt = mgmt or internal_wifi
         if mgmt:
             mgmt.role = "mgmt"
 

@@ -64,6 +64,18 @@ def test_real_uconsole_recording() -> None:
     assert "no wired test interface detected" in inv.warnings
 
 
+def test_real_uconsole_with_dongles() -> None:
+    # Recorded with AX88179 + MT7610U + RTL8188CUS attached. NetworkManager had DHCP'd the AX88179,
+    # giving it the lowest-metric default route — it must still become test-wired, not mgmt.
+    inv = detect(load_fixture("uconsole-cm4-dongles"))
+    assert _by_name(inv, "brcmfmac").role == "mgmt"
+    assert _by_name(inv, "AX88179").role == "test-wired"
+    assert _by_name(inv, "MT7610U").role == "monitor"
+    assert _by_name(inv, "RTL8188CUS").role == "test-wifi"
+    assert _by_name(inv, "bcmgenet").role == "unused"
+    assert "no wired test interface detected" not in inv.warnings
+
+
 def test_future_hardware_autodetected() -> None:
     inv = detect(load_fixture("uconsole-cm4-future"))
     assert _by_name(inv, "MT7921AU").role == "monitor"

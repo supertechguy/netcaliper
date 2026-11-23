@@ -359,6 +359,10 @@ channel. Installer implications:
   `/etc/initramfs-tools/conf.d/root-device-workaround` (`MODULES=most`) and runs `dpkg --configure -a`
   before installing anything.
 - Debian's `rtl-sdr` package does **not** blacklist the DVB modules — the installer must.
+- NetworkManager DHCPs any USB NIC it sees (AX88179 got the lowest-metric default route, ahead of
+  the Wi-Fi mgmt link). The installer writes an NM `unmanaged-devices` drop-in keyed by MAC for every
+  test-role interface (regenerated on role change) before moving it into `ncal-test`. Detection
+  already prefers built-in interfaces for mgmt and never takes the only wired NIC.
 - uConsole has no Ethernet jack; the CM4's `eth0` (bcmgenet) is forced `unused`. The keyboard MCU
   (`1eaf:0024`) identifies the platform. Steps: apt deps (package
 names resolved per release, e.g. `chromium` vs `chromium-browser`) → users (`netcaliper`, `ncal-kiosk`)
