@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Settings · netcaliper{% endblock %}
+{% block main %}
+<section class="page settings">
+  <h1>{{ icon("settings", "ico h-ico") }} Settings</h1>
+
+  <h2>Cloud sync</h2>
+  <p class="dim small">Results, findings and the audit log are copied to your dashboard as metadata. Raw captures,
+    Wi-Fi/802.1X credentials and certificates never leave this device.</p>
+  {% include "partials/cloud.html" %}
+  <div class="forms">
+    {% if cloud.enrolled %}
+    <button class="btn" hx-post="/settings/cloud/sync" hx-target="#cloud-msg" autofocus>{{ icon("reset") }} Sync now</button>
+    <button class="btn btn-alt" hx-post="/settings/cloud/unenroll" hx-target="#cloud-msg"
+      hx-confirm="Remove the cloud token from this device?">{{ icon("forget") }} Unenroll</button>
+    {% endif %}
+    {% if cloud.allowed %}
+    <form class="inline wrap" hx-post="/settings/cloud/enroll" hx-target="#cloud-msg">
+      <label>Server <input name="server" value="{{ cloud.server }}" size="30" autocomplete="off" spellcheck="false"></label>
+      <label>Code <input name="code" placeholder="XXXXX-XXXXX" size="12" autocomplete="off" spellcheck="false"
+        {% if not cloud.enrolled %}autofocus{% endif %}></label>
+      <button class="btn">{{ icon("import") }} {% if cloud.enrolled %}Re-enroll{% else %}Enroll{% endif %}</button>
+    </form>
+    {% endif %}
+  </div>
+  <div id="cloud-msg"></div>
+
+  <h2>Remote access</h2>
+  <p class="dim small">Use this device's UI from a browser on the management network (HTTPS, password). Test ports can't reach it.</p>
+  <table class="kv">
+    <tr><th>Listener</th><td>{% if not remote.port %}<span class="dim">off (web.remote_port = 0)</span>
+      {% elif not remote.cert %}<span class="warn">no TLS certificate — re-run the installer</span>
+      {% else %}https://&lt;this device&gt;:{{ remote.port }}/{% endif %}</td></tr>
+    {% if remote.fingerprint %}<tr><th>Certificate</th><td class="small">SHA-256 {{ remote.fingerprint }}<br><span class="dim">self-signed: check this matches what your browser shows on first connect</span></td></tr>{% endif %}
+    <tr><th>Password</th><td>{% if remote.password %}set{% else %}<span class="dim">not set — remote access closed</span>{% endif %}</td></tr>
+  </table>
+  {% if remote.local %}
+  <div class="forms">
+    <form class="inline wrap" hx-post="/settings/remote/password" hx-target="#remote-msg" hx-on::after-request="this.reset()">
+      <input type="password" name="password" placeholder="new password ({{ remote.min }}+ chars)" size="22" autocomplete="new-password">
+      <input type="password" name="confirm" placeholder="again" size="14" autocomplete="new-password">
+      <button class="btn">{{ icon("save") }} {% if remote.password %}Change{% else %}Set{% endif %} password</button>
+    </form>
+    {% if remote.password %}<button class="btn btn-alt" hx-post="/settings/remote/clear" hx-target="#remote-msg"
+      hx-confirm="Close remote access?">{{ icon("forget") }} Close remote access</button>{% endif %}
+  </div>
+  {% else %}
+  <form method="post" action="/logout"><p class="dim small">You're connected remotely; the password can only be changed at the device.
+    <button class="btn btn-alt">{{ icon("cancel") }} Log out</button></p></form>
+  {% endif %}
+  <div id="remote-msg"></div>
+
+  <h2>Profiles</h2>
+  <table class="kv">
+    {% for p in profiles %}
+    <tr><th>{{ p.name }}</th><td class="dim">{{ p.id }} · {{ p.source }} · {{ p.steps | length }} steps</td></tr>
+    {% endfor %}
+  </table>
+  <p class="dim small">Sources: builtin &lt; cloud (pushed from the dashboard) &lt; local (/etc/netcaliper/profiles).</p>
+</section>
+{% endblock %}
+{% block keyhints %}<kbd>←↑→↓</kbd> choose · <kbd>Enter</kbd> activate · <kbd>Esc</kbd> leave field / back{% endblock %}

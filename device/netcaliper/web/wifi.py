@@ -133,7 +133,8 @@ def install(
         if key == "full":
             from ..modules.autotest import load_profiles
 
-            p = load_profiles(app.state.settings.config_dir / "profiles").get("wifi")
+            st = app.state.settings
+            p = load_profiles(st.config_dir / "profiles", st.cloud_profiles_dir).get("wifi")
             if p is None:
                 raise HTTPException(404)
             return start_partial(request, p)

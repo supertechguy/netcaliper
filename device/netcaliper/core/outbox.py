@@ -27,7 +27,7 @@ async def enqueue(conn: aiosqlite.Connection, record: Record) -> None:
     await conn.execute(
         "INSERT INTO outbox(record_id, kind, schema_version, priority, payload, created_at, next_attempt_at)"
         " VALUES (?,?,?,?,?,?,?) ON CONFLICT(record_id) DO UPDATE SET payload=excluded.payload,"
-        " acked_at=NULL, attempts=0, next_attempt_at=excluded.next_attempt_at",
+        " acked_at=NULL, rejected=NULL, attempts=0, next_attempt_at=excluded.next_attempt_at",
         (
             record.id,
             record.KIND,
@@ -88,6 +88,20 @@ class Outbox:
             "UPDATE outbox SET acked_at=? WHERE record_id=?", [(now, rid) for rid in record_ids]
         )
         await self.db.conn.commit()
+
+    async def reject(self, reasons: dict[str, str]) -> None:
+        """The cloud refused these for good (validation): stop retrying, keep the reason."""
+        now = utcnow().isoformat()
+        await self.db.conn.executemany(
+            "UPDATE outbox SET acked_at=?, rejected=? WHERE record_id=?",
+            [(now, reason[:200], rid) for rid, reason in reasons.items()],
+        )
+        await self.db.conn.commit()
+
+    async def rejected_count(self) -> int:
+        async with self.db.conn.execute("SELECT count(*) FROM outbox WHERE rejected IS NOT NULL") as cur:
+            row = await cur.fetchone()
+        return int(row[0]) if row else 0
 
     async def fail(self, record_ids: list[str]) -> None:
         """Exponential backoff with jitter per record."""

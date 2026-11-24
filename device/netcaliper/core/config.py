@@ -16,12 +16,18 @@ DEFAULT_CONFIG_FILE = Path("/etc/netcaliper/netcaliper.toml")
 
 
 class WebSettings(BaseModel):
-    host: str = "127.0.0.1"
+    host: str = "127.0.0.1"  # kiosk listener (plain HTTP, loopback, no login)
     port: int = 8080
+    # Remote browser access: HTTPS on all root-namespace interfaces (= the management uplink; test
+    # ports live in the test netns). Needs the cert below and an admin password set at the device.
+    remote_port: int = 8443  # 0 = off
+    tls_cert: Path = Path("/etc/netcaliper/tls/web.crt")
+    tls_key: Path = Path("/etc/netcaliper/tls/web.key")
 
 
 class SyncSettings(BaseModel):
-    enabled: bool = False
+    # Master switch: sync runs only once the device is enrolled (Settings → Cloud); false = never.
+    enabled: bool = True
     server_url: str = "https://netcaliper.supertechguy.net"
     allow_over_test_port: bool = False
 
@@ -54,6 +60,10 @@ class Settings(BaseModel):
     @property
     def db_path(self) -> Path:
         return self.data_dir / "netcaliper.db"
+
+    @property
+    def cloud_profiles_dir(self) -> Path:
+        return self.data_dir / "cloud-profiles"
 
     @property
     def artifacts_dir(self) -> Path:

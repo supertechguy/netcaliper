@@ -3,9 +3,9 @@ name: device-ci
 on:
   push:
     branches: [main]
-    paths: ["device/**", "schemas/**", "installer/**", ".github/workflows/device-ci.yml"]
+    paths: ["device/**", "schemas/**", "installer/**", "cloud/scripts/gen_icons.py", "cloud/public/icons.js", ".github/workflows/device-ci.yml"]
   pull_request:
-    paths: ["device/**", "schemas/**", "installer/**", ".github/workflows/device-ci.yml"]
+    paths: ["device/**", "schemas/**", "installer/**", "cloud/scripts/gen_icons.py", "cloud/public/icons.js", ".github/workflows/device-ci.yml"]
   workflow_dispatch:
 
 defaults:
@@ -30,6 +30,7 @@ jobs:
       - run: ruff check . && ruff format --check .
       - run: mypy
       - run: netcaliper schemas --check
+      - run: python ../cloud/scripts/gen_icons.py --check  # dashboard icons follow the device's
       - run: pytest -q
         env:
           NETCALIPER_HW: mock:uconsole-cm4-full

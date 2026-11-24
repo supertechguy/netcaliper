@@ -22,8 +22,13 @@ The box is plugged into untrusted networks.
   separate user with no capabilities.
 - Root is confined to `netcaliper-helper`: allowlisted, schema-validated actions, peer-credential
   checked, no shell. Changes to the helper get a dedicated review.
-- Web UI/API: loopback only. Remote browser access (login with argon2id + TLS on the mgmt interface)
-  is deferred to Phase 4, next to cloud enrollment; until then remote use is VNC (below) or SSH.
+- Web UI/API: loopback (kiosk) without login. Remote browsers: HTTPS-only listener on :8443 in the
+  root namespace (so never reachable from a network under test), self-signed cert with its
+  fingerprint shown at the device, and a session from the local admin password (scrypt, local secret
+  store). No password set = remote access closed; the password can only be set or removed at the
+  device. HttpOnly/Secure/SameSite=Strict session cookie, 12 h, memory only; a password change ends
+  all sessions; failed logins throttled (5/address, 20 total per 5 min); logins audit-logged. A
+  remote user has the same powers as someone at the keyboard (active tests still need an engagement).
 - Remote view/control (opt-in, `install.sh --vnc`): `wayvnc` attached to the kiosk's cage session,
   running as `ncal-kiosk` (no capabilities). Listens on :5900 in the **root namespace only**, so it is
   reachable from the management network and never from a network under test. Authentication is
@@ -58,9 +63,21 @@ The box is plugged into untrusted networks.
   was sent to can't drive the device).
 
 ## Cloud
-- Device tokens: 32 random bytes, stored as SHA-256, revocable. Enrollment codes: one-time, 15 min.
-- Dashboard/admin behind Cloudflare Access **and** in-Worker JWT validation; `workers.dev` disabled.
-- Raw artifacts (pcaps, raw scan output) never leave the device.
+- Device tokens: 32 random bytes, stored as SHA-256, revocable from the dashboard (401 stops the
+  device until re-enrolled). On the device the token sits in the local secret store, never synced.
+- Enrollment codes: 50 random bits (Crockford base32), shown once, stored as SHA-256, 15 min, single
+  use (claimed atomically).
+- Dashboard/admin behind Cloudflare Access **and** in-Worker JWT validation (RS256 against the team
+  JWKS; audience, issuer, expiry checked; fails closed when unconfigured); `workers_dev` and
+  `preview_urls` off; the deploy script refuses a config that differs. Device endpoints
+  (`/api/v1/enroll|sync|config|health`) are the only Access bypass and authenticate by token.
+- Admin state changes need `application/json` and a same-origin `Origin` (CSRF). Strict CSP, no
+  inline script; device-supplied text is never inserted as HTML.
+- Every record is validated server-side; ids, sizes and statement counts are bounded; the device id
+  comes from the token, so a device can't write as another one.
+- What syncs: runs, results (incl. client MACs and SSIDs in Wi-Fi details), findings, audit log.
+  What never syncs: raw artifacts (pcaps, raw scan output), credentials, certificates, the device token.
+  Cloud profiles containing credential fields are refused.
 
 ## Reporting
 Report vulnerabilities privately via GitHub security advisories on this repository.

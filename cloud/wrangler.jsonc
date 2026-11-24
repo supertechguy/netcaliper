@@ -1,0 +1,43 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// netcaliper cloud Worker. See docs/ARCHITECTURE.md §7.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "netcaliper",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-20",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Only the custom domain: no *.workers.dev and no preview URLs, so Cloudflare Access can't be
+  // sidestepped through another hostname (the Worker checks the Access JWT itself as well).
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "netcaliper.supertechguy.net", "custom_domain": true }],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "netcaliper",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Dashboard. Every request goes through the Worker first so the Access JWT is checked on the
+  // dashboard too, not only on the API.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+
+  "triggers": { "crons": ["17 3 * * *"] },
+
+  "vars": {
+    // Set at deploy time (GitHub Actions: --var). Empty = admin API and dashboard refuse everything.
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": "",
+    // Workers Free: 100k rows written/day. Back-off starts at 70 %, only audit + findings past 90 %.
+    "DAILY_ROW_BUDGET": "100000"
+  },
+
+  "observability": { "enabled": true }
+}

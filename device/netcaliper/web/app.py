@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Form, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -28,15 +28,18 @@ from ..core.outbox import Outbox
 from ..core.repo import Repository
 from ..core.rpc import RpcClient
 from ..core.secrets import SecretStore
+from ..core.sync import CloudSync
 from ..core.testplane import TestPlane, watch_hotplug
 from ..drivers.registry import HardwareRegistry
 from ..modules.autotest import AutoTest, Busy, Profile, load_profiles
 from ..modules.registry import all_modules
 from ..modules.runner import ModuleRunner, ModuleStep
 from ..net.base import TestNet
+from .auth import COOKIE, Auth
 from .icons import icon, wordmark
 from .kiosk import blank_after_s, on_ac, read_env
 from .sections import BY_SLUG, SECTIONS
+from .settings import install as install_settings
 from .wifi import install as install_wifi
 from .wifi import resolve_wifi
 
@@ -155,6 +158,17 @@ def create_app(
         )
         if app.state.plane is None and real:
             app.state.plane = TestPlane(RpcClient(settings.helper_socket), settings.test_netns, AuditLog(db))
+        app.state.sync = cloud = CloudSync(
+            app.state.outbox,
+            secrets,
+            AuditLog(db),
+            settings.cloud_profiles_dir,
+            settings.sync.server_url,
+            allowed=settings.sync.enabled,
+            known_modules=lambda: set(modules),
+            platform_name=lambda: registry.inventory.platform.name,
+        )
+        sync_task = asyncio.create_task(cloud.run())
         await refresh_and_place()
         watcher = None
         if real and settings.test_plane.hotplug_poll_s > 0:
@@ -165,6 +179,9 @@ def create_app(
             yield
         finally:
             await app.state.autotest.cancel()
+            sync_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await sync_task
             if watcher:
                 watcher.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
@@ -178,15 +195,34 @@ def create_app(
     app.state.secrets = SecretStore(settings.data_dir / "secrets.json")
     app.state.certs = CertStore(settings.data_dir / "certs")
 
+    app.state.auth = auth = Auth(app.state.secrets)
+
     @app.middleware("http")
-    async def local_only(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-        # Remote (mgmt-interface) access needs login + TLS (planned alongside cloud enrollment).
-        # Until then: loopback only.
+    async def access(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+        # Loopback (the kiosk) needs no login. Anything else: TLS listener + a valid session.
         if not _is_loopback(request.client.host if request.client else None):
-            return JSONResponse({"detail": "remote access requires login (not yet enabled)"}, status_code=403)
+            if request.url.scheme != "https":
+                return JSONResponse({"detail": "remote access is HTTPS-only"}, status_code=403)
+            path = request.url.path
+            if path.startswith("/settings/remote/"):
+                return JSONResponse({"detail": "only at the device itself"}, status_code=403)
+            if (
+                path != "/login"
+                and not path.startswith("/static/")
+                and not auth.valid(request.cookies.get(COOKIE))
+            ):
+                if request.headers.get("hx-request"):
+                    return Response(status_code=401, headers={"HX-Redirect": "/login"})
+                if request.method == "GET" and "text/html" in request.headers.get("accept", ""):
+                    return RedirectResponse("/login", status_code=303)
+                return JSONResponse({"detail": "login required"}, status_code=401)
         if request.method not in ("GET", "HEAD", "OPTIONS") and not _same_origin(request):
             return JSONResponse({"detail": "cross-origin request refused"}, status_code=403)
-        return await call_next(request)
+        resp = await call_next(request)
+        resp.headers.setdefault("X-Frame-Options", "DENY")
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        resp.headers.setdefault("Referrer-Policy", "no-referrer")
+        return resp
 
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 
@@ -211,7 +247,7 @@ def create_app(
         return templates.TemplateResponse(request, "home.html", ctx(request, tiles=tiles))
 
     def profiles() -> dict[str, Any]:
-        return load_profiles(settings.config_dir / "profiles")
+        return load_profiles(settings.config_dir / "profiles", settings.cloud_profiles_dir)
 
     def wired_iface() -> Any:
         devs = registry.inventory.by_role("test-wired")
@@ -384,6 +420,7 @@ def create_app(
         notice,
         RpcClient(settings.agent_socket, timeout=30) if real else None,
     )
+    install_settings(app, templates, ctx, notice, profiles)
 
     # JSON API
     @app.get("/api/v1/profiles")
@@ -440,7 +477,13 @@ def create_app(
         return templates.TemplateResponse(
             request,
             "partials/status.html",
-            ctx(request, pending=pending, mgmt=mgmt[0] if mgmt else None, now=utcnow(), sync=settings.sync),
+            ctx(
+                request,
+                pending=pending,
+                mgmt=mgmt[0] if mgmt else None,
+                now=utcnow(),
+                sync=app.state.sync.status(),
+            ),
         )
 
     @app.get("/partials/hardware", response_class=HTMLResponse)

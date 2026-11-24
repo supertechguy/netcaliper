@@ -1,0 +1,36 @@
+{
+  "name": "netcaliper-cloud",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler d1 migrations apply netcaliper --local --config wrangler.dev.jsonc && wrangler dev --config wrangler.dev.jsonc --ip 127.0.0.1 --port 8787",
+    "types": "node scripts/gen-types.mjs",
+    "types:check": "node scripts/gen-types.mjs --check",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "migrate:local": "wrangler d1 migrations apply netcaliper --local --config wrangler.dev.jsonc",
+    "deploy": "wrangler deploy",
+    "check": "tsc --noEmit && node scripts/gen-types.mjs --check && vitest run"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "hono": "^4.13.21"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.9.1",
+    "@cloudflare/workers-types": "^5.20261124.1",
+    "json-schema-to-typescript": "^16.0.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.1",
+    "wrangler": "^4.167.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "esbuild@0.28.2": true,
+    "workerd@1.20260815.1": true,
+    "workerd@1.20261123.1": true
+  }
+}

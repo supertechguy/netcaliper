@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -72,7 +73,37 @@ def cmd_serve(args: argparse.Namespace) -> int:
         settings.data_dir = Path(args.data_dir)
     host = args.host or settings.web.host
     port = args.port or settings.web.port
-    uvicorn.run(create_app(settings), host=host, port=port, log_level="info")
+    app = create_app(settings)
+    servers = [uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_level="info"))]
+    web = settings.web
+    if web.remote_port and web.tls_cert.is_file() and os.access(web.tls_key, os.R_OK):
+        # Remote listener: same app, TLS, all root-netns interfaces (the mgmt uplink). Login enforced
+        # by the app for every non-loopback client.
+        servers.append(
+            uvicorn.Server(
+                uvicorn.Config(
+                    app,
+                    host="0.0.0.0",  # noqa: S104 - root netns only; test ports are in the test netns
+                    port=web.remote_port,
+                    ssl_certfile=str(web.tls_cert),
+                    ssl_keyfile=str(web.tls_key),
+                    lifespan="off",
+                    log_level="info",
+                )
+            )
+        )
+
+    async def run_all() -> None:
+        main_task = asyncio.create_task(servers[0].serve())
+        while not servers[0].started and not main_task.done():  # noqa: ASYNC110 - uvicorn exposes a flag, not an event
+            await asyncio.sleep(0.1)
+        tasks = [main_task] + [asyncio.create_task(s.serve()) for s in servers[1:]]
+        await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for s in servers:
+            s.should_exit = True
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    asyncio.run(run_all())
     return 0
 
 

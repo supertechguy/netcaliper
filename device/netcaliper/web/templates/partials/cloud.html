@@ -1,0 +1,21 @@
+<div id="cloud" hx-get="/partials/cloud" hx-trigger="every 5s" hx-swap="outerHTML">
+  <table class="kv">
+    {% if not cloud.allowed %}
+    <tr><th>Status</th><td class="warn">disabled in netcaliper.toml ([sync] enabled = false)</td></tr>
+    {% elif not cloud.enrolled %}
+    <tr><th>Status</th><td>not enrolled — results stay on this device</td></tr>
+    {% else %}
+    <tr><th>Device</th><td>{{ cloud.device_name or "?" }}{% if cloud.site %} <span class="dim">· {{ cloud.site }}</span>{% endif %}</td></tr>
+    <tr><th>Server</th><td>{{ cloud.server }}</td></tr>
+    <tr><th>Status</th><td>
+      {% if cloud.revoked %}<span class="fail">token refused (revoked?) — enroll again</span>
+      {% elif cloud.last_error %}<span class="warn">{{ cloud.last_error }}</span>{% if cloud.backoff_s %} <span class="dim">· retry in {{ cloud.backoff_s }} s</span>{% endif %}
+      {% elif cloud.last_ok %}<span class="st-pass">ok</span> <span class="dim">· last sync {{ cloud.last_ok }}{% if cloud.backoff_s %} · server asked to wait {{ cloud.backoff_s }} s{% endif %}</span>
+      {% else %}<span class="dim">waiting for first sync…</span>{% endif %}
+    </td></tr>
+    <tr><th>Config</th><td class="dim">{% if cloud.last_pull %}pulled {{ cloud.last_pull }}{% if cloud.profiles %} · profiles: {{ cloud.profiles | join(", ") }}{% endif %}{% else %}not pulled yet{% endif %}
+      {% for s in cloud.profiles_skipped %}<br><span class="warn">skipped {{ s }}</span>{% endfor %}</td></tr>
+    {% endif %}
+    <tr><th>Queue</th><td>{{ pending }} record(s) waiting{% if rejected %} · <span class="warn">{{ rejected }} refused by the cloud</span>{% endif %}</td></tr>
+  </table>
+</div>

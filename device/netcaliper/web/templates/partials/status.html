@@ -1,7 +1,10 @@
 <span class="brand">{{ wordmark() }}</span>
 {% if mock %}<span class="pill warn">MOCK HW</span>{% endif %}
 <span class="pill">mgmt: {{ mgmt.ifname if mgmt else "none" }}</span>
-<span class="pill">sync: {% if sync.enabled %}{{ pending }} queued{% else %}off ({{ pending }} queued){% endif %}</span>
+{% if not sync.allowed or not sync.enrolled %}<span class="pill">sync: off ({{ pending }} queued)</span>
+{% elif sync.revoked %}<span class="pill warn">sync: revoked</span>
+{% elif sync.last_error %}<span class="pill warn" title="{{ sync.last_error }}">sync: retry{% if sync.backoff_s %} in {{ (sync.backoff_s / 60) | round(0, "ceil") | int }} min{% endif %} ({{ pending }} queued)</span>
+{% else %}<span class="pill">sync: {% if pending %}{{ pending }} queued{% else %}ok{% endif %}</span>{% endif %}
 {% if inv.platform.battery_percent is not none %}<span class="pill">bat {{ inv.platform.battery_percent }}%</span>{% endif %}
 <span class="spacer"></span>
 <span class="clock">{{ now.strftime("%H:%M") }}Z</span>

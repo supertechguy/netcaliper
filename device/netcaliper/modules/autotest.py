@@ -44,10 +44,15 @@ class Profile(_Profile):
     interface: Literal["test-wired", "test-wifi"] = "test-wired"  # role of the interface under test
 
 
-def load_profiles(extra_dir: Path | None = None) -> dict[str, Profile]:
-    """Built-ins, then `extra_dir/*.yaml` (same id overrides). Broken files are logged and skipped."""
+def load_profiles(extra_dir: Path | None = None, cloud_dir: Path | None = None) -> dict[str, Profile]:
+    """Built-ins, then cloud profiles (pulled from the dashboard), then `extra_dir/*.yaml` (local,
+    /etc/netcaliper/profiles) — a later source with the same id wins. Broken files are skipped."""
     out: dict[str, Profile] = {}
-    dirs = [(BUILTIN_PROFILES, "builtin")] + ([(extra_dir, "local")] if extra_dir else [])
+    dirs: list[tuple[Path, str]] = [(BUILTIN_PROFILES, "builtin")]
+    if cloud_dir:
+        dirs.append((cloud_dir, "cloud"))
+    if extra_dir:
+        dirs.append((extra_dir, "local"))
     for d, source in dirs:
         if not d.is_dir():
             continue

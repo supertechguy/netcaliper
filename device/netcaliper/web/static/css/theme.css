@@ -117,3 +117,16 @@ table.bss tr.assoc td:first-child::before { content: "● "; color: var(--ok); }
   filter: drop-shadow(0 0 4px var(--fg-dim)); }
 summary .ico { margin-right: .4em; }
 .page p.sub { margin: -.4em 0 .6em; }
+
+/* Settings */
+table.kv { border-collapse: collapse; margin: 6px 0 12px; font-size: .85em; }
+table.kv th { text-align: left; font-weight: normal; color: var(--fg-dim); padding: 3px 18px 3px 0; vertical-align: top; white-space: nowrap; }
+table.kv td { padding: 3px 0; }
+.settings h2 { margin-top: 22px; }
+
+/* Remote login */
+body.login-page { display: grid; place-items: center; grid-template-rows: 1fr; }
+main.login { display: flex; flex-direction: column; gap: 18px; align-items: center; overflow: visible; }
+.login-brand .wordmark { height: 48px; width: auto; color: var(--fg); filter: drop-shadow(0 0 6px var(--fg-dim)); }
+main.login form { display: flex; gap: 10px; align-items: end; }
+main.login label { display: flex; flex-direction: column; gap: 4px; font-size: .8em; color: var(--fg-dim); }

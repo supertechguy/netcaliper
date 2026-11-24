@@ -25,6 +25,10 @@
 | 2026-11-23 | Client MAC addresses, AP associations and probed SSIDs are kept in Wi-Fi results (and sync as metadata); frame payloads are never read |
 | 2026-11-23 | One saved Wi-Fi network + EAP-TLS cert store, both local-only (shared with wired 802.1X) |
 | 2026-11-23 | UI icons: pixel-grid inline SVG in the boot-splash style (no image assets) |
+| 2026-11-24 | Cloud: `@cloudflare/vitest-plugin` (pool-workers was renamed), Vitest 5, Hono 4 (all MIT/Apache-2.0); dashboard is plain JS (no build, no vendored libs yet) |
+| 2026-11-24 | Result bodies stored as JSON text in D1 (no in-Worker gzip: 10 ms CPU); retention drops them after 90 days, runs kept |
+| 2026-11-24 | Remote access password hashed with stdlib scrypt instead of argon2id (no new dependency); HTTPS on :8443 alongside the loopback kiosk listener |
+| 2026-11-24 | Sync needs no `SO_BINDTODEVICE`: core is in the root netns, test ports are in `ncal-test` |
 
 ## Phases
 
@@ -34,7 +38,7 @@
 | 1 | Installer + kiosk | fresh Pi OS → boots into UI on uConsole; `--dev` on x86; `ncal-test` netns + agent + helper; nftables; idempotent re-run; uninstall | done (uConsole: boot-to-kiosk, reinstall, uninstall verified; x86 `--dev` verified in CI) |
 | 2 | Wired AutoTest | link, LLDP/CDP/EDP, DHCP (+rogue), DNS, gateway, IPv6, ping/TCP/HTTP/FTP, VLAN, 802.1X wired, profiles + thresholds, port blink, cable-test probe, results screen; netns integration tests | done (AutoTest + Wired screen on the uConsole/AX88179 against a real LAN; netns tests in CI and on device; EAP-TLS deferred) |
 | 3 | Wi-Fi core | multi-radio scan, IE decoding, channel/interference analysis, connection test (PSK + EAP), roaming, client discovery (monitor), locate | done (uConsole: scan on both radios, PSK/SAE connect + DHCP vs a lab AP, monitor + locate on the MT7610U; hwsim netns test incl. roaming; EAP verified by config tests only) |
-| 4 | Cloud sync v1 | Worker + D1 + migrations + Actions deploy, enroll, sync, config pull, Access JWT check, usage meter + back-off, retention cron, basic dashboard | planned |
+| 4 | Cloud sync v1 | Worker + D1 + migrations + Actions deploy, enroll, sync, config pull, Access JWT check, usage meter + back-off, retention cron, basic dashboard | in progress (all code + tests done; uConsole synced to a local Worker; remote HTTPS login verified on the device; **production deploy waits for the Cloudflare setup in docs/DEPLOY.md**) |
 | 5 | Discovery | ARP/ICMP/mDNS/SSDP/NetBIOS/LLDP, SNMP v1/2c/3, OUI DB, classification, topology, problem detection | planned |
 | 6 | Security | engagements + audit UI, scope guard, nmap + NSE + CVE enrichment, policy engine, rogue detection, wireless posture, segmentation, inventory export | planned |
 | 7 | AirMapper | floor plans, walk-and-click survey (passive/active), heatmaps, survey sync + dashboard viewer | planned |
@@ -122,9 +126,9 @@
 | Power saving: dim 9 min → backlight off 10 min (configurable, optional shorter on battery), wake on any key/trackball/VNC input with the waking input swallowed, status polling paused while dark | X | installer (`kiosk-display`, swayidle), `web` | backlight | 1 | done |
 | Keep screen awake during long jobs (surveys, long tests) | X | UI wake lock / idle inhibit | — | 7 | planned |
 | Boot splash | X | installer | uConsole | 2 | done (Plymouth theme, verified on the uConsole boot) |
-| Remote browser access (login + TLS on mgmt) | E | `web` | — | 4 | planned |
+| Remote browser access (login + TLS on mgmt) | E | `web` | — | 4 | done (HTTPS :8443, scrypt password, sessions, throttling; verified on the uConsole) |
 | HTML + PDF per-run and per-site reports | E/C | `reports` | — | 9 | planned |
-| Cloud: enroll, sync, config pull, dashboard | E/C (Link-Live) | `cloud/` | — | 4 | planned |
+| Cloud: enroll, sync, config pull, dashboard | E/C (Link-Live) | `cloud/` | — | 4 | done in code (Worker tests + device e2e vs local Worker); deploy pending |
 | Cloud: survey viewer, findings, audit, editors, share links | E/C | `cloud/` | — | 4–9 | planned |
 
 ## Known hardware limits (summary — details in HARDWARE.md)

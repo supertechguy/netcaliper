@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Log in · netcaliper</title>
+  <link rel="stylesheet" href="/static/css/theme.css">
+</head>
+<body class="login-page">
+  <main class="login">
+    <div class="login-brand">{{ wordmark() }}</div>
+    {% if configured %}
+    <form method="post" action="/login">
+      <label>Password <input type="password" name="password" autocomplete="current-password" autofocus required></label>
+      <button class="btn">{{ icon("connect") }} Log in</button>
+    </form>
+    {% else %}
+    <p class="warn">Remote access isn't set up. Set a password at the device: Settings → Remote access.</p>
+    {% endif %}
+    {% if error %}<p class="notice-warn" role="alert">{{ error }}</p>{% endif %}
+  </main>
+</body>
+</html>

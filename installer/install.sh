@@ -85,10 +85,10 @@ fi
 
 # ------------------------------------------------------------------ packages
 
-PKGS=(iproute2 iw ethtool wpasupplicant nftables curl python3 python3-venv
+PKGS=(iproute2 iw ethtool wpasupplicant nftables curl openssl python3 python3-venv
 	nmap arp-scan tcpdump tshark iperf3 rtl-sdr rtl-433 bluez)
 [[ $KIOSK == 1 ]] && PKGS+=(cage chromium wlr-randr kbd swayidle fonts-dejavu-core)
-[[ $VNC == 1 ]] && PKGS+=(wayvnc openssl)
+[[ $VNC == 1 ]] && PKGS+=(wayvnc)
 
 if [[ $SKIP_APT == 0 ]]; then
 	step "Packages"
@@ -185,6 +185,21 @@ fi
 CHANGED=0
 install_file "$SRC/installer/nftables/ncal-test.nft" "$ETC/nftables/ncal-test.nft" 0640 "root:$SVC_USER"
 NFT_CHANGED=$CHANGED
+
+# TLS for remote browser access (https://<device>:8443, closed until an admin password is set in
+# Settings). Self-signed, generated once; Settings shows its fingerprint to compare on first connect.
+install -d -m 0750 -o root -g "$SVC_USER" "$ETC/tls"
+if [[ ! -f $ETC/tls/web.key ]]; then
+	umask 027
+	openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -sha256 -days 3650 -nodes \
+		-keyout "$ETC/tls/web.key" -out "$ETC/tls/web.crt" -subj "/CN=$(hostname)" \
+		-addext "subjectAltName=DNS:$(hostname),DNS:$(hostname).local" 2>/dev/null
+	umask 022
+	chown root:"$SVC_USER" "$ETC/tls/web.key" "$ETC/tls/web.crt"
+	chmod 0640 "$ETC/tls/web.key"
+	chmod 0644 "$ETC/tls/web.crt"
+	info "generated self-signed TLS certificate for remote access"
+fi
 
 KENV=$(mktemp)
 {
@@ -346,6 +361,7 @@ for _ in $(seq 1 30); do
 done
 if curl -fsS -o /dev/null --max-time 2 http://127.0.0.1:8080/api/v1/health; then
 	info "core is up on http://127.0.0.1:8080/"
+	info "remote access: https://$(hostname).local:8443/ (set a password first: Settings → Remote access)"
 else
 	warn "core did not answer: journalctl -u netcaliper-core"
 fi
