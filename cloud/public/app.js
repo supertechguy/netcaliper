@@ -78,8 +78,14 @@ function fmt(v) {
 }
 
 /** Generic table of objects (used for e.g. wifi.scan BSS lists and client lists in result details). */
-function objTable(rows, maxCols = 10) {
-  const cols = [];
+// columns worth seeing first for known detail lists (the rest follow, up to maxCols)
+const PREFERRED_COLS = {
+  bss: ["ssid", "bssid", "band", "channel", "signal_dbm", "security", "pairwise", "pmf", "wps", "wps_locked", "standards"],
+};
+
+function objTable(rows, maxCols = 10, prefer = []) {
+  maxCols = Math.max(maxCols, prefer.length);
+  const cols = [...prefer];
   for (const r of rows.slice(0, 50)) for (const k of Object.keys(r)) if (!cols.includes(k) && cols.length < maxCols) cols.push(k);
   return h(
     "table",
@@ -204,6 +210,25 @@ VIEWS.runs = async (q) => {
   ];
 };
 
+/** What a finding is about: `evidence.suspects` (e.g. "SSID (bssid)") as lines, other keys as k: v. */
+function evidence(f) {
+  const ev = f.evidence && typeof f.evidence === "object" ? f.evidence : {};
+  const lines = [];
+  for (const [k, v] of Object.entries(ev)) {
+    if (k === "suspects" && Array.isArray(v)) lines.push(...v.map(String));
+    else lines.push(`${k}: ${typeof v === "object" ? JSON.stringify(v) : String(v)}`);
+  }
+  if (!lines.length) return null;
+  const shown = lines.slice(0, 6);
+  return h(
+    "div.evidence",
+    shown.map((l) => h("div", l)),
+    lines.length > shown.length
+      ? h("details", h("summary", `+${lines.length - shown.length} more`), lines.slice(shown.length).map((l) => h("div", l)))
+      : null,
+  );
+}
+
 VIEWS.run = async (_q, id) => {
   if (!devName.size) await loadDevices();
   const d = await api(`/runs/${encodeURIComponent(id)}`);
@@ -220,7 +245,7 @@ VIEWS.run = async (_q, id) => {
     d.findings.length
       ? [
           h("h2", icon("security"), " Findings"),
-          h("table", h("tbody", d.findings.map((f) => h("tr", h("td", sev(f.severity)), h("td", f.title), h("td.dim", f.rule_id))))),
+          h("table", h("tbody", d.findings.map((f) => h("tr", h("td", sev(f.severity)), h("td", f.title, evidence(f)), h("td.dim", f.rule_id))))),
         ]
       : null,
     h("h2", "Results"),
@@ -240,7 +265,7 @@ VIEWS.run = async (_q, id) => {
           : null,
         Object.entries(res.details || {}).map(([k, v]) =>
           Array.isArray(v) && v.length && typeof v[0] === "object"
-            ? [h("h2.small", `${k} (${v.length})`), objTable(v)]
+            ? [h("h2.small", `${k} (${v.length})`), objTable(v, 10, PREFERRED_COLS[k])]
             : null,
         ),
         h("details", h("summary", "raw JSON"), h("pre", JSON.stringify(res, null, 2))),
@@ -267,7 +292,7 @@ VIEWS.findings = async (q) => {
                 "tr",
                 h("td", when(f.created_at)),
                 h("td", sev(f.severity)),
-                h("td", f.title),
+                h("td", f.title, evidence(f)),
                 h("td.dim", f.rule_id),
                 h("td", devName.get(f.device_id) || short(f.device_id)),
                 h("td", f.run_id ? h("a", { href: `#/run/${f.run_id}` }, "run") : ""),

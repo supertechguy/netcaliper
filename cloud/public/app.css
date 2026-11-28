@@ -75,3 +75,5 @@ pre { white-space: pre-wrap; word-break: break-word; background: var(--bg-2); pa
 #toast { position: fixed; bottom: 1rem; right: 1rem; max-width: 40ch; }
 #toast > div { background: var(--bg-2); border: 1px solid var(--fg); border-radius: var(--radius); padding: .5rem .8rem; margin-top: .4rem; }
 #toast > div.err { border-color: var(--fail); color: var(--fail); }
+.evidence { color: var(--fg-dim); font-size: .85em; margin-top: .2rem; overflow-wrap: anywhere; }
+.evidence summary { cursor: pointer; }
