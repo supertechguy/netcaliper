@@ -29,16 +29,18 @@ jobs:
 
   # Runs only once the repository is set up for it (docs/DEPLOY.md): repository variable
   # CLOUDFLARE_DEPLOY=true, secrets CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID, variables
-  # ACCESS_TEAM_DOMAIN + ACCESS_AUD.
+  # ACCESS_TEAM_DOMAIN + ACCESS_AUD (variables or secrets).
   deploy:
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.CLOUDFLARE_DEPLOY == 'true'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && vars.CLOUDFLARE_DEPLOY == 'true'
     runs-on: ubuntu-latest
     environment: production
     concurrency: deploy-cloud
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      ACCESS_TEAM_DOMAIN: ${{ vars.ACCESS_TEAM_DOMAIN || secrets.ACCESS_TEAM_DOMAIN }}
+      ACCESS_AUD: ${{ vars.ACCESS_AUD || secrets.ACCESS_AUD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -56,7 +58,7 @@ jobs:
             id=$(npx wrangler d1 list --json | node -e 'const l=JSON.parse(require("fs").readFileSync(0));console.log(l.find(x=>x.name==="netcaliper").uuid)')
           fi
           echo "id=$id" >> "$GITHUB_OUTPUT"
-      - run: node scripts/deploy-config.mjs "${{ steps.d1.outputs.id }}" "${{ vars.ACCESS_TEAM_DOMAIN }}" "${{ vars.ACCESS_AUD }}"
+      - run: node scripts/deploy-config.mjs "${{ steps.d1.outputs.id }}" "$ACCESS_TEAM_DOMAIN" "$ACCESS_AUD"
       - run: npx wrangler d1 migrations apply netcaliper --remote --config wrangler.deploy.json
       - run: npx wrangler deploy --config wrangler.deploy.json
       - name: Smoke test
